@@ -1,0 +1,27 @@
+node_modules/
+dist/
+screenshot*.png
+test-sample.png
+test-album/
+test-formats/
+perf-album/
+many-album/
+self-check-*
+live-check*
+manual-ai-choose.png
+models-picker.png
+*.log
+.DS_Store
+src-tauri/target/
+src-tauri/Cargo.lock.bak
+*.timestamp-*.mjs
+.backup-before-electron-removal/
+.backup-before-repack/
+
+# 隐私加固（2026-10-06）
+rp*.txt
+build.log
+tsc.log
+gb.log
+docs/
+

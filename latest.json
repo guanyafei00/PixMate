@@ -1,0 +1,11 @@
+{
+  "version": "0.3.6",
+  "notes": "v0.3.6：多模型辩论收敛的 P0 改进——顶栏信息架构重排（打开文件夹升主按钮 / AI 生成移入命令面板 / 视图组降权）、空状态增加「打开文件夹」直达按钮、浅色主题分层修复（实色材质+发丝线加深+品牌字对比度）、键盘焦点可见性（focus-visible）、按钮观感统一",
+  "pub_date": "2026-10-11T13:10:51Z",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSNEJSM1lkaW9qdEFHTW5YNnc3c2FHY25sQlBGNE5USHJRSzZ1YThGSTJBV09Fa2lUb3hVaDIwU3V0V3Yzelg3T0VTMmZKdmllN0J0Wit1d2hhZjg5cXM5b2hkVWZDalFrPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxNzI0MjQyCWZpbGU6UGl4TWF0ZV8wLjMuNl94NjQtc2V0dXAuZXhlCmJEdjZMdllyL1VrNnphZE1DMG9WWWk3eUhLajZRM3dYTnhnTHJ0TGZDK053czgxbjZRMzdPR3RMamkwc2RsMVVudFpsR29mQjUzOFlQZzlGSTVUZkNBPT0K",
+      "url": "https://github.com/guanyafei00/PixMate/releases/download/v0.3.6/PixMate_0.3.6_x64-setup.exe"
+    }
+  }
+}
