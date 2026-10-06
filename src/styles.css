@@ -1,0 +1,2552 @@
+/**
+ * 设计规范（IINA / macOS 取向 + 看板调研结论，暗色优先）：
+ * - canvas #07080A（纯黑最衬图）· surface #0D0D0D · hairline #242728
+ * - AI accent #57C1FF：AI 专属标识色，勿用于普通 UI
+ * - 动效铁律：所有 transition ≤150ms；主浏览路径（图片切换）无动画；
+ *   任何超过 200ms 的动画不许出现在主浏览路径上。
+ *
+ * 【材质层：原生感的三个来源】（2026-09-20 引入，对标 IINA）
+ *   ① 侧栏/顶栏用半透明材质（--mat / --mat-strong），底下的画面微微透出来
+ *   ② 分割线用**白色发丝线** rgba(255,255,255,.07)，不是实心灰 —— 这条最像 macOS
+ *   ③ 大圆角 + 柔和阴影 + 大留白；按钮默认无边框、只有极淡填充，悬停才浮起
+ *      （实心边框会形成"网格感"，正是要避免的厚重来源）
+ *
+ *   ⚠️ 性能红线：本机跑软件光栅化（--disable-gpu），**大面积 backdrop-filter 很贵**。
+ *      所以材质一律用半透明纯色，blur 只留给小的浮动元素（HUD / 工具条 / 信息浮层）。
+ *      实测：改完首帧 406–418ms，与改前持平 —— 视觉升级没有付出性能代价。
+ */
+:root {
+  color-scheme: dark;
+  --bg: #07080a;
+  --canvas: #07080a; /* 主图区画布：白天模式也保持纯黑（看图铁律），独立于界面底色 */
+  --panel: #0d0d0d;
+  --panel-elev: #101111;
+  --border: #242728;
+  --text: #f4f4f6;
+  --muted: #9c9c9d;
+  --primary: #57c1ff;
+  --primary-ink: #06121c; /* accent 上面的文字用深色 */
+  --primary-weak: rgba(87, 193, 255, 0.12);
+  --danger: #ff6161;
+  --radius: 10px;
+  --shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+
+  /* ── 材质层（IINA / macOS 取向）──────────────────────────────
+     原生感的三个来源，比"换个更好看的深灰"有效得多：
+       ① 侧栏/顶栏是半透明材质，底下的画面微微透出来（vibrancy 的 CSS 近似）
+       ② 分割线是白色发丝线，**不是实心灰** —— 这一条最像 macOS
+       ③ 大圆角 + 柔和阴影 + 大留白
+     ⚠️ 性能红线：本机跑软件光栅化（--disable-gpu），大面积 backdrop-filter 很贵。
+        所以材质一律用半透明纯色，blur 只保留给小的浮动元素（HUD / 工具条 / 信息浮层）。 */
+  --mat: rgba(12, 12, 13, 0.78);
+  --mat-strong: rgba(9, 9, 10, 0.92);
+  --hairline: rgba(255, 255, 255, 0.07);
+  --hairline-strong: rgba(255, 255, 255, 0.13);
+  --radius-lg: 12px;
+  --elev: rgba(255, 255, 255, 0.06);
+  --elev-hover: rgba(255, 255, 255, 0.11);
+  --ok: #6ee7a8;
+  --ok-weak: rgba(110, 231, 168, 0.1);
+  --ok-border: rgba(110, 231, 168, 0.3);
+  --tip-bg: rgba(6, 18, 28, 0.9);
+}
+
+/* ── 白天主题：html[data-theme="light"] ──────────────────────────
+   只换变量值，不改布局。画布 --canvas 跟随白底（用户拍板）。 */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f2f3f5;
+  --canvas: #ffffff; /* 白天模式画布跟随白底（用户拍板：不保持纯黑） */
+  --panel: #ffffff;
+  --panel-elev: #ffffff;
+  --border: #d8dce2;
+  --text: #1b1d21;
+  --muted: #667085;
+  --primary: #096fd6;
+  --primary-ink: #ffffff;
+  --primary-weak: rgba(9, 111, 214, 0.1);
+  --danger: #d92d20;
+  --shadow: 0 6px 24px rgba(16, 24, 40, 0.14);
+  --mat: rgba(255, 255, 255, 0.85);
+  --mat-strong: rgba(255, 255, 255, 0.96);
+  --hairline: rgba(0, 0, 0, 0.08);
+  --hairline-strong: rgba(0, 0, 0, 0.16);
+  --elev: rgba(0, 0, 0, 0.05);
+  --elev-hover: rgba(0, 0, 0, 0.09);
+  --ok: #12855f;
+  --ok-weak: rgba(18, 133, 95, 0.08);
+  --ok-border: rgba(18, 133, 95, 0.32);
+  --tip-bg: rgba(255, 255, 255, 0.95);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Microsoft YaHei", sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* 顶栏：IINA 取向 —— 三栏网格，文件名当「文档标题」居中 */
+.topbar {
+  height: 56px;
+  flex: 0 0 56px;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr; /* 左 / 中 / 右：中间自然居中 */
+  align-items: center;
+  gap: 12px;
+  padding: 0 14px;
+  background: var(--mat);
+  border-bottom: 1px solid var(--hairline);
+  z-index: 8;
+  /* 【2026-10-04 修标题重叠】grid 子项默认 min-width:auto —— 列内容
+     （长文件名/品牌名）再长也撑着不缩，非最大化窗口下左右两列与中列
+     相互挤压重叠。显式 min-width:0 让三列都能收缩，配合下面的省略号。 */
+  /* 自动隐藏靠这条过渡（见文件末尾 .chrome-hidden） */
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+/* 中间栏：标题 + 翻页 + 计数，整体居中 */
+.topbar-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* 文件名当标题 —— 这是「我在看什么」的第一信息，给足字号和对比度 */
+.doc-title {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text);
+  max-width: min(34vw, 420px);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 品牌弱化：它只是应用标识，不该跟当前文件名抢注意力 */
+.brand {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.4px;
+  color: var(--muted);
+  white-space: nowrap;
+  /* 非最大化窗口下避免与文件名挤压重叠：超宽时省略 */
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  /* 顶栏窄窗口时允许换行，按钮不再溢出被裁掉 */
+  flex-wrap: wrap;
+}
+
+/* 翻页导航（P0.5）：居中的页码 + 左右箭头 + 删除 */
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nav-btn {
+  width: 26px;
+  padding: 5px 0;
+  text-align: center;
+  font-size: 17px;
+  line-height: 1;
+  background: transparent;
+  color: var(--muted);
+}
+
+.nav-btn:hover {
+  background: var(--elev-hover);
+  color: var(--text);
+}
+
+.counter {
+  font-size: 12px;
+  color: var(--muted);
+  min-width: 52px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.btn {
+  /* IINA 取向：默认无边框，只有一层极淡的填充；悬停才浮起。
+     实心边框在深色界面上会形成"网格感"，正是要避免的厚重来源。 */
+  border: 1px solid transparent;
+  background: var(--elev);
+  color: var(--text);
+  padding: 6px 13px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  /* 结果条里的按钮在窄容器里会被压成两行（「另存为…」断成「另存」+「为…」），必须禁止换行 */
+  white-space: nowrap;
+  transition: background 0.12s ease, color 0.12s ease; /* ≤150ms 铁律 */
+}
+
+.btn:hover {
+  background: var(--elev-hover);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn.primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-ink);
+  font-weight: 600;
+}
+
+.btn.primary:hover {
+  filter: brightness(1.08);
+}
+
+/* 顶栏里处于「已开启」状态的功能按钮（如信息浮层） */
+.btn.active {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--primary-weak);
+}
+
+/* 主体：左图右栏 */
+.body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  position: relative; /* 空状态引导 overlay 的定位基准 */
+}
+
+/* ================================================================== */
+/* 左侧缩略图栏（大文件夹导航，虚拟滚动）                                */
+/* ================================================================== */
+
+.thumb-rail {
+  flex: 0 0 124px;
+  transition: flex-basis 0.22s ease, opacity 0.22s ease;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--mat);
+  border-right: 1px solid var(--hairline);
+}
+
+.rail-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 8px 6px 10px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.rail-title {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+.rail-count {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.rail-close {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+  padding: 3px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.rail-close:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+/* 滚动容器：虚拟滚动的视口。overscroll-behavior 防止滚到底带动主图区 */
+.rail-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+}
+
+/* 占位层：只负责把滚动条撑到真实总高度（2000 张 = 152000px） */
+.rail-spacer {
+  position: relative;
+  width: 100%;
+}
+
+.thumb-item {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 70px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.thumb-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.thumb-item.active {
+  border-color: rgba(87, 193, 255, 0.55);
+  background: var(--primary-weak);
+}
+
+/* 缩略图本体：固定盒子 + object-fit，避免不同比例把行高撑歪。
+   必须给足 width/height 属性，Chromium 才会按显示尺寸解码（大图省内存的关键） */
+.thumb-img {
+  width: 56px;
+  height: 56px;
+  flex: 0 0 56px;
+  object-fit: cover;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.04);
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.thumb-no {
+  font-size: 10px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 缩略图加载前的同尺寸占位：尺寸必须与真图完全一致，否则换成真图会重排 */
+.thumb-ph {
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.thumb-item.active .thumb-no {
+  color: var(--primary);
+}
+
+/* ================================================================== */
+/* 自动隐藏界面（IINA 的灵魂）                                         */
+/* ================================================================== */
+
+/* 看图时界面让位，鼠标一动立刻回来。
+   只做 opacity/transform/宽度，不做 backdrop 模糊 —— 软件光栅化下那太贵。
+   顶栏上滑出屏、侧栏收成 0 宽，画布顺势吃掉多出来的空间。 */
+.chrome-hidden .topbar {
+  opacity: 0;
+  transform: translateY(-100%);
+  pointer-events: none;
+}
+
+.chrome-hidden .thumb-rail {
+  flex-basis: 0;
+  min-width: 0;
+  opacity: 0;
+  border-right-color: transparent;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* 主图区：纯黑画布最衬图（无棋盘格、无装饰）
+   必须 position:relative + overflow:hidden —— 缩放后的图要被裁在画布内，HUD 以画布为定位基准 */
+.image-view {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: var(--canvas);
+  overflow: hidden;
+  transition: padding-bottom 150ms ease;
+}
+
+/* 底部有停靠条（框选工具 / 编辑结果）时，画布让出底部空间：
+   图片在这条带之上居中，编辑功能区不再压住图片 */
+.image-view.docked {
+  /* 320：框选动作条两态（按钮行+服务商说明）实测最高约 240 逻辑px，
+     148 不够 —— 动作条会压住图片右下（用户 2026-10-06 实测反馈） */
+  padding-bottom: 320px;
+}
+
+/* 还没打开图时才提示可点击；打开后光标语义交给缩放/平移 */
+.image-view:not(.pannable):not(.panning) {
+  cursor: pointer;
+}
+
+/* 可平移 / 正在平移：给标准抓取光标，用户一看就知道能拖 */
+.image-view.pannable {
+  cursor: grab;
+}
+
+.image-view.panning {
+  cursor: grabbing;
+}
+
+/* 拖拽悬停：给出明确反馈（动效 ≤150ms） */
+.image-view.dragging {
+  outline: 2px dashed var(--primary);
+  outline-offset: -14px;
+  background: var(--primary-weak);
+}
+
+.image-canvas {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 6px;
+  box-shadow: var(--shadow);
+  /* 图片切换铁律：无动画、无过渡 */
+  transform-origin: center center;
+  will-change: transform;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* 已知原始尺寸后由内联 width/height 接管，此时不能被 max-width 卡住，否则缩放无效 */
+.image-canvas.sized {
+  max-width: none;
+  max-height: none;
+}
+
+/* 图片读不出来时不能静默留白（文件损坏 / 格式不支持 / 协议读不到） */
+.image-error {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  font-size: 13px;
+  color: var(--danger);
+  background: rgba(255, 97, 97, 0.12);
+  border: 1px solid rgba(255, 97, 97, 0.35);
+  padding: 8px 14px;
+  border-radius: 8px;
+}
+
+/* 缩放 HUD：悬浮在画布右下角，不占布局、不挡图（借鉴 CleanShot 的浮层即操作） */
+.zoom-hud {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--mat-strong);
+  border: 1px solid var(--hairline);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+}
+
+.hud-btn {
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.hud-btn.wide {
+  font-size: 12px;
+  padding: 0 10px;
+}
+
+.hud-btn:hover {
+  background: rgba(255, 255, 255, 0.09);
+}
+
+/* 框选模式激活态：用 AI accent 区分「当前处于会被 AI 使用的模式」 */
+.hud-btn.active {
+  background: var(--primary-weak);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.hud-percent {
+  font-size: 12px;
+  color: var(--muted);
+  min-width: 46px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  cursor: default;
+}
+
+.hud-sep {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  margin: 0 2px;
+}
+
+.drop-hint {
+  text-align: center;
+  color: var(--muted);
+  user-select: none;
+}
+
+.drop-icon {
+  font-size: 44px;
+  margin-bottom: 8px;
+}
+
+.drop-hint p {
+  margin: 4px 0;
+  font-size: 15px;
+  color: var(--text);
+}
+
+.drop-hint span {
+  font-size: 12px;
+}
+
+/* 右侧识别面板 */
+.result-panel {
+  flex: 0 0 360px;
+  width: 360px;
+  display: flex;
+  flex-direction: column;
+  background: var(--mat);
+  border-left: 1px solid var(--hairline);
+}
+
+.result-head {
+  height: 46px;
+  flex: 0 0 46px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.result-title {
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+/* AI 专属标识点（accent 色仅用于 AI 相关元素） */
+.ai-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--primary);
+  display: inline-block;
+}
+
+.result-file {
+  font-size: 12px;
+  color: var(--muted);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 模式切换（护城河的入口）：两段式，选中态用 AI accent */
+.mode-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 4px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.mode-tab {
+  flex: 1;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-family: inherit;
+  padding: 6px 8px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.mode-tab:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+}
+
+.mode-tab.active {
+  color: var(--primary);
+  background: var(--primary-weak);
+  border-color: rgba(87, 193, 255, 0.4);
+  font-weight: 600;
+}
+
+.mode-tab:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.result-body {
+  flex: 1;
+  padding: 14px 16px;
+  overflow: auto;
+}
+
+.placeholder {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* 识别中状态：具体文案 + 闪烁光标（绝不 spinner） */
+.thinking {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.caret {
+  display: inline-block;
+  width: 2px;
+  height: 14px;
+  margin-left: 3px;
+  vertical-align: -2px;
+  background: var(--primary);
+  animation: caret-blink 1s steps(2) infinite;
+}
+
+@keyframes caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* 未配置模型时的温和引导（不是错误，用 accent 而非红色） */
+.setup-guide {
+  border: 1px solid rgba(87, 193, 255, 0.3);
+  background: var(--primary-weak);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+
+.setup-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+.setup-guide p {
+  margin: 0 0 12px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+.retry-btn {
+  margin-top: 10px;
+}
+
+.error-box {
+  color: var(--danger);
+  font-size: 13px;
+  line-height: 1.6;
+  background: rgba(255, 97, 97, 0.09);
+  border: 1px solid rgba(255, 97, 97, 0.35);
+  padding: 10px 12px;
+  border-radius: 8px;
+}
+
+.result-edit {
+  width: 100%;
+  height: 100%;
+  min-height: 320px;
+  border: none;
+  outline: none;
+  resize: none;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text);
+  background: transparent;
+  font-family: inherit;
+}
+
+.result-foot {
+  flex: 0 0 56px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 16px;
+  border-top: 1px solid var(--border);
+}
+
+/* 设置弹窗 */
+.modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.modal {
+  width: 440px;
+  max-width: 92vw;
+  max-height: 88vh;
+  overflow: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 18px 20px 20px;
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 600;
+  margin-bottom: 14px;
+}
+
+/* 设置弹窗：左侧固定分页导航（不随内容滚动），右侧滚动内容区 */
+.set-modal {
+  width: 580px;
+  max-width: 94vw;
+  height: 640px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.set-body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.set-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 140px;
+  flex-shrink: 0;
+  margin-right: 16px;
+  padding-right: 12px;
+  border-right: 1px solid var(--hairline);
+}
+
+.set-nav button {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  text-align: left;
+  padding: 9px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.set-nav button:hover {
+  background: var(--elev);
+  color: var(--text);
+}
+
+.set-nav button.active {
+  background: var(--primary-weak);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.set-content {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.set-foot {
+  flex-shrink: 0;
+}
+
+/* 设置面板内的分组小标题（识别模型 / 图像编辑） */
+.modal-section {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary);
+  letter-spacing: 0.2px;
+  margin: 18px 0 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.modal-section:first-of-type {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.icon-btn {
+  border: none;
+  background: transparent;
+  font-size: 16px;
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.field span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.field input,
+.field select {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 11px;
+  font-size: 13px;
+  outline: none;
+  background: var(--panel-elev);
+  color: var(--text);
+  font-family: inherit;
+}
+
+.field input:focus,
+.field select:focus {
+  border-color: var(--primary);
+}
+
+.preset-note {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--primary);
+  background: var(--primary-weak);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin: -4px 0 14px;
+}
+
+.preset-link {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  white-space: nowrap;
+}
+
+/* 连接测试结果：成功/失败要一眼分得清，失败信息可能多行（含「怎么改」的提示） */
+.key-mismatch {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: rgba(255, 199, 117, 0.09);
+  border: 1px solid rgba(250, 199, 117, 0.3);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.test-result {
+  display: flex;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.65;
+  /* 报错现在是多行的（带排查步骤），必须保留换行 */
+  white-space: pre-line;
+  border-radius: 8px;
+  padding: 9px 12px;
+  margin: -4px 0 14px;
+}
+
+.test-result.ok {
+  color: var(--ok);
+  background: var(--ok-weak);
+  border: 1px solid var(--ok-border);
+}
+
+.test-result.bad {
+  color: var(--danger);
+  background: rgba(255, 97, 97, 0.09);
+  border: 1px solid rgba(255, 97, 97, 0.32);
+}
+
+.test-result-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 生图体检的逐模型结果：每行一个模型，行内还要塞一个「用这个」按钮。
+   .test-result 是 flex 容器，按钮默认会被当成 flex 项拉直 —— 显式改回
+   行内元素并给一点上边距，让它贴在模型名后面而不是独占一行。 */
+.gen-probe-line {
+  margin-top: 6px;
+  line-height: 1.9;
+}
+
+.gen-probe-line:first-child {
+  margin-top: 0;
+}
+
+.gen-probe-pick {
+  margin-left: 6px;
+  padding: 1px 8px;
+  font-size: 12px;
+  vertical-align: middle;
+}
+
+.foot-spacer {
+  flex: 1;
+}
+
+/* ================================================================== */
+/* AI 视觉编辑（P1.5）：框选 / 动作条 / 结果条                          */
+/* ================================================================== */
+
+.image-view.selecting {
+  cursor: crosshair;
+}
+
+/* 选区：虚线框 + 四角把手，用 accent 色（AI 专属标识色） */
+.sel-box {
+  position: absolute;
+  z-index: 4;
+  border: 1px dashed var(--primary);
+  background: rgba(87, 193, 255, 0.1);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.sel-box.live {
+  background: rgba(87, 193, 255, 0.16);
+}
+
+/* 框选模式下的操作提示，浮在画布顶端居中 */
+.select-hint {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  font-size: 12px;
+  color: var(--primary);
+  background: var(--tip-bg);
+  border: 1px solid rgba(87, 193, 255, 0.4);
+  padding: 6px 14px;
+  border-radius: 999px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* 贴着选区浮出的动作卡片（借鉴 CleanShot 的「浮层即操作」）
+   【已改为底部停靠】380px 的卡片压在图上，用户要编辑的恰恰是被挡住的那块 ——
+   现在停靠画布底部居中，画布用 padding-bottom 让位，互不遮挡 */
+.sel-toolbar {
+  position: absolute;
+  z-index: 6;
+  transform: translateX(-50%);
+  width: 400px;
+  max-width: calc(100vw - 340px); /* 给右下角的缩放 HUD 让位 */
+  background: var(--mat-strong);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(12px);
+  padding: 10px 12px 8px;
+}
+
+/* 停靠时缩放 HUD 挪到右上角，避免与底部工具条打架 */
+.image-view.docked .zoom-hud {
+  bottom: auto;
+  top: 16px;
+}
+
+/* 编辑结果条（top:16、几乎全宽）在场时，缩放 HUD 再下移一行给它让位，
+   否则两者在窗口右上角重叠、HUD 被结果条盖住点不到 */
+.image-view.edit-bar-visible .zoom-hud {
+  bottom: auto;
+  top: 64px;
+}
+
+.sel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.sel-size {
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.sel-close {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+}
+
+.sel-close:hover {
+  color: var(--text);
+}
+
+.sel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sel-action {
+  border: 1px solid var(--border);
+  background: var(--panel-elev);
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+  padding: 6px 12px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.sel-action:hover:not(:disabled) {
+  border-color: var(--primary);
+  background: var(--primary-weak);
+  color: var(--primary);
+}
+
+.sel-action:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* 「图片会上传」这件事必须让用户看见 —— 产品定位是本地优先，这是一处让步 */
+.sel-foot {
+  margin-top: 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.sel-foot strong {
+  color: #ffb454;
+}
+
+.sel-prompt {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.sel-prompt input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--border);
+  background: var(--panel-elev);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+}
+
+.sel-prompt input:focus {
+  border-color: var(--primary);
+}
+
+/* 生成中的图稍微压暗，提示「它正在被改动」 */
+.image-canvas.busy {
+  opacity: 0.55;
+}
+
+/* 编辑结果条：浮在画布顶部居中 */
+.edit-bar {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 7;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100% - 40px);
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  background: var(--mat-strong);
+  border: 1px solid var(--hairline-strong);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.58);
+  backdrop-filter: blur(12px);
+}
+
+.edit-bar.working {
+  border-color: rgba(87, 193, 255, 0.45);
+}
+
+.edit-bar.done {
+  border-color: rgba(87, 193, 255, 0.55);
+}
+
+.edit-bar.error {
+  border-color: rgba(255, 97, 97, 0.5);
+  color: var(--danger);
+}
+
+.edit-bar-text {
+  color: var(--text);
+  /* 保存路径可能很长，限宽 + 省略号，别把按钮挤到换行 */
+  max-width: 460px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.edit-bar.error .edit-bar-text {
+  color: var(--danger);
+}
+
+/* 报错可能带「怎么改」的第二行，允许换行 */
+.edit-bar-multiline {
+  white-space: pre-wrap;
+  max-width: 520px;
+}
+
+.edit-bar-note {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.edit-bar-saved {
+  color: var(--ok);
+}
+
+.edit-bar-warn {
+  color: var(--danger);
+}
+
+/* ================================================================== */
+/* 命令面板（Ctrl+K）：搜索式万能出口                                    */
+/* ================================================================== */
+
+.cmdk {
+  width: 480px;
+  max-width: 90vw;
+  background: var(--panel-elev);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 12px;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.cmdk input {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  padding: 12px 14px;
+  font-family: inherit;
+}
+
+.cmdk-list {
+  max-height: 320px;
+  overflow-y: auto;
+  border-top: 1px solid var(--hairline);
+}
+
+.cmdk-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text);
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+.cmdk-item.on {
+  background: var(--primary-weak);
+  color: var(--primary);
+}
+
+.cmdk-item.muted {
+  color: var(--muted);
+  cursor: default;
+}
+
+.cmdk-ic {
+  font-size: 13px;
+}
+
+.cmdk .k {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--muted);
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  padding: 0 5px;
+}
+
+/* ================================================================== */
+/* 首启空状态引导（M4）：三步上手 + 逃生门                               */
+/* ================================================================== */
+
+.grp {
+  display: flex;
+  gap: 2px;
+  padding: 0 8px;
+  border-left: 1px solid var(--hairline);
+}
+
+.grp:first-child {
+  border-left: none;
+  padding-left: 0;
+}
+
+.ai-btn {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.empty-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  background: var(--canvas);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.empty-emoji {
+  font-size: 42px;
+}
+
+.empty-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.empty-btns {
+  display: flex;
+  gap: 10px;
+}
+
+.empty-steps {
+  display: flex;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.estep {
+  width: 150px;
+  background: var(--panel-elev);
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  padding: 12px;
+  text-align: center;
+}
+
+.estep .en {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: var(--primary-ink);
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 6px;
+}
+
+.estep .et {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.estep .ed {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+.empty-foot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.empty-skip {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11.5px;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+.empty-skip:hover {
+  color: var(--text);
+  background: var(--elev);
+}
+
+.empty-kbd {
+  font-size: 10.5px;
+  color: var(--muted);
+  opacity: 0.8;
+}
+
+/* ================================================================== */
+/* 场景快捷坞（UI 方案 v0.3 / M1）：底部高频操作条                       */
+/* ================================================================== */
+
+.dock {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  background: var(--panel);
+  border-top: 1px solid var(--hairline);
+}
+
+.dock-label {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.dock-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  padding: 5px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--hairline);
+  color: var(--text);
+  cursor: pointer;
+  background: var(--panel-elev);
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.dock-item:hover {
+  background: var(--primary-weak);
+  color: var(--primary);
+}
+
+.dock-item.hot {
+  border-color: transparent;
+  background: var(--primary);
+  color: var(--primary-ink);
+  font-weight: 600;
+}
+
+.dock-item.hot:hover {
+  background: var(--primary);
+  opacity: 0.92;
+}
+
+.dock-item.on {
+  background: var(--primary-weak);
+  color: var(--primary);
+}
+
+.dock-item .ic {
+  font-size: 13px;
+}
+
+.dock-sp {
+  flex: 1;
+}
+
+.dock-more,
+.dock-restore {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.dock-more:hover,
+.dock-restore:hover {
+  background: var(--elev);
+  color: var(--text);
+}
+
+.dock-collapsed {
+  justify-content: flex-end;
+  padding: 4px 10px;
+}
+
+/* ================================================================== */
+/* 图片信息浮层（本地能力：文件属性 + EXIF）                             */
+/* ================================================================== */
+
+/* 放左上角：顶部中间是编辑结果条、右下角是缩放 HUD，都不打架 */
+.info-panel {
+  position: absolute;
+  left: 16px;
+  top: 16px;
+  z-index: 6;
+  width: 300px;
+  max-height: calc(100% - 32px);
+  display: flex;
+  flex-direction: column;
+  background: var(--mat-strong);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.58);
+  backdrop-filter: blur(10px);
+  font-size: 12px;
+}
+
+.info-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.info-title {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.info-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.info-copy,
+.info-close {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 2px 5px;
+  border-radius: 5px;
+  line-height: 1.2;
+}
+
+.info-copy:hover,
+.info-close:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* 信息可能很长（EXIF 十几项），面板内部滚动，不撑破画布 */
+.info-body {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 8px 12px 10px;
+}
+
+.info-row {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 3px 0;
+}
+
+.info-k {
+  flex: 0 0 62px;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: right;
+}
+
+.info-v {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text);
+  word-break: break-all;
+  line-height: 1.5;
+}
+
+.info-dim {
+  color: var(--muted);
+}
+
+.info-sep {
+  margin: 8px 0 4px;
+  padding-top: 7px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--primary);
+  letter-spacing: 0.3px;
+}
+
+/* ================================================================== */
+/* 一眼摘要卡片                                                        */
+/* ================================================================== */
+
+/* 排版取向：这是面板里唯一"大字"，靠字号和一道细强调条建立层级，
+   不加边框、不加底色块 —— IINA 那类原生界面靠留白和字重做层级，不靠框。 */
+.summary-card {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 2px 0 10px;
+  padding: 2px 0 2px 11px;
+  border-left: 2px solid var(--primary);
+}
+
+.summary-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--text);
+  font-weight: 500;
+  /* 摘要允许拖选复制 */
+  user-select: text;
+}
+
+.summary-ask {
+  flex: 0 0 auto;
+  border: 1px solid var(--hairline);
+  background: transparent;
+  color: var(--primary);
+  font-size: 11px;
+  font-family: inherit;
+  padding: 3px 9px;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s ease;
+}
+
+.summary-ask:hover {
+  background: var(--primary-weak);
+}
+
+/* ================================================================== */
+/* AI 面板收起态：右侧细条（纯看图模式的入口）                          */
+/* ================================================================== */
+
+/* 做成"可点的边沿"而不是完全消失 —— 对齐 IINA 侧栏收起的做法。
+   宽度刻意只占 30px：既不挡图，又始终看得见"AI 在哪"。 */
+.result-strip {
+  flex: 0 0 30px;
+  width: 30px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 12px 0;
+  border: none;
+  border-left: 1px solid var(--hairline);
+  background: var(--mat);
+  color: var(--muted);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.result-strip:hover {
+  background: var(--elev);
+  color: var(--text);
+}
+
+.strip-chevron {
+  font-size: 15px;
+  line-height: 1;
+}
+
+/* 竖排文字：writing-mode 比逐字加换行干净，且能被正常选中/朗读 */
+.strip-label {
+  writing-mode: vertical-rl;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: inherit;
+}
+
+/* ================================================================== */
+/* 版本切换条（A/B 对比）                                              */
+/* ================================================================== */
+
+/* 分段控件样式：chip 之间共用一道发丝线，选中的那个浮起来。
+   刻意做得紧凑 —— 它挂在结果条上，不该抢走"另存为/放弃"的注意力。 */
+.ver-bar {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  border: 1px solid var(--hairline);
+  border-radius: 7px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.ver-chip {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1;
+  padding: 5px 9px;
+  cursor: pointer;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.ver-chip + .ver-chip {
+  border-left: 1px solid var(--hairline);
+}
+
+.ver-chip:hover {
+  background: var(--elev-hover);
+  color: var(--text);
+}
+
+.ver-chip.active {
+  background: var(--primary-weak);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+/* 勾选类字段：复选框与说明文字并排，说明用小字弱化 */
+.field-check {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.field-check input[type="checkbox"] {
+  margin-top: 2px;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.field-note {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  font-style: normal;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+/* 字段内的一行操作（如「检测本地服务」+ 说明） */
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 2px 0 8px;
+}
+
+.row-actions .field-note {
+  margin-top: 0;
+}
+
+/* ================================================================== */
+/* 模型选择器（拉取到的清单：按厂商分组 + 可看图标注）                    */
+/* ================================================================== */
+
+/* 输入框 + 右侧动作按钮 同一行 */
+.field-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.field-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.field-row .btn {
+  flex: 0 0 auto;
+}
+
+.model-picker {
+  margin: 4px 0 10px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.025);
+  overflow: hidden;
+}
+
+.mp-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.mp-search {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  outline: none;
+}
+
+.mp-toggle {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.mp-toggle input {
+  accent-color: var(--primary);
+  margin: 0;
+}
+
+.mp-close {
+  flex: 0 0 auto;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.mp-close:hover {
+  color: var(--text);
+  background: var(--elev);
+}
+
+.mp-note {
+  padding: 7px 10px;
+  font-size: 11px;
+  color: var(--danger);
+  border-bottom: 1px solid var(--hairline);
+}
+
+/* 清单本体：限高 + 滚动，避免把设置面板撑得老长 */
+.mp-list {
+  max-height: 260px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px 0;
+}
+
+.mp-empty {
+  padding: 14px 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.mp-group-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px 4px;
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.03em;
+  position: sticky;
+  top: 0;
+  background: var(--panel); /* 模型选择器分组吸顶：跟随主题，浅色下不再是一块黑板 */
+}
+
+.mp-group-count {
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+.mp-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  text-align: left;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.mp-item:hover {
+  background: var(--elev-hover);
+}
+
+.mp-item.active {
+  background: var(--primary-weak);
+  color: var(--primary);
+}
+
+.mp-id {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mp-badge {
+  flex: 0 0 auto;
+  font-size: 10px;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+
+.mp-badge.vision {
+  color: var(--primary);
+  border-color: rgba(87, 193, 255, 0.4);
+  background: var(--primary-weak);
+}
+
+.mp-badge.nonchat {
+  color: var(--muted);
+  border-color: var(--hairline);
+}
+
+.mp-foot {
+  padding: 7px 10px;
+  font-size: 10.5px;
+  color: var(--muted);
+  line-height: 1.5;
+  border-top: 1px solid var(--hairline);
+}
+
+/* ================================================================== */
+/* 场景选择器 + 本地工具面板                                            */
+/* ================================================================== */
+
+/* 原生 <select> 的弹出列表：必须同时给 select 本体和 option 设色，
+   只设一边会出现两处配色不一致（用户实测的白底白字）。
+   颜色绑定主题变量 —— 白天模式下弹层跟随变白，不再与界面打架。 */
+select option,
+select optgroup {
+  background-color: var(--panel);
+  color: var(--text);
+}
+
+.scene-select {
+  height: 28px;
+  border: 1px solid var(--hairline);
+  border-radius: 7px;
+  background: var(--elev);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  padding: 0 6px;
+  cursor: pointer;
+  max-width: 108px;
+}
+
+.scene-select:hover {
+  background: var(--elev-hover);
+}
+
+/* 本地工具面板：与信息浮层同在画布左上角，所以两者互斥（见 App 里的 setInfoOpen/setToolsOpen） */
+.local-tools {
+  position: absolute;
+  left: 16px;
+  top: 16px;
+  z-index: 7;
+  width: 306px;
+  max-height: calc(100% - 32px);
+  display: flex;
+  flex-direction: column;
+  background: var(--mat-strong);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.58);
+  backdrop-filter: blur(12px);
+  font-size: 12px;
+  overflow: hidden;
+}
+
+.lt-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 8px 10px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+/* AI 生成配图弹窗 */
+.gen-prompt {
+  width: 100%;
+  resize: vertical;
+  min-height: 72px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  padding: 9px 11px;
+  font-size: 13px;
+  line-height: 1.6;
+  font-family: var(--font-sans, inherit);
+}
+
+.gen-result {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.gen-result img {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+
+/* 图生图：字段标题后面那行灰字说明（不是每个字段都要，克制使用） */
+.gen-hint {
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--text-dim, #7a8699);
+  margin-left: 6px;
+}
+
+/* 生图弹窗：模型区的「拉取模型 / 手动填写」按钮行。
+   放在字段标题与下拉之间，理由同设置页的「拉取模型」——
+   它是"这个列表从哪来"的入口，应该紧贴着列表本身。 */
+.gen-fetch-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.gen-fetch-row .btn {
+  font-size: 12px;
+  padding: 4px 10px;
+}
+
+/* 文生图 / 图生图 模式页签
+   【为什么要显式分开】两种模式需要的模型不同、端点不同、状态也该各自独立。
+   隐式切换（传了参考图就变成图生图）会让用户搞不清自己在哪个模式。 */
+.gen-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 3px;
+  /* 用一个浅底托住整组，视觉上是个"二选一"而不是两个普通按钮 */
+  background: rgba(127, 127, 127, 0.1);
+  border-radius: 10px;
+}
+
+.gen-tab {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 9px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dim, #7a8699);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.gen-tab:hover:not(.active) {
+  color: var(--text, #e6e9ef);
+  background: rgba(127, 127, 127, 0.12);
+}
+
+.gen-tab.active {
+  color: var(--text, #e6e9ef);
+  background: var(--panel, #1a1d23);
+  border-color: var(--border, #2b303a);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+
+/* 页签里那行更小的说明文字（"从一句话造一张新图"） */
+.gen-tab-sub {
+  font-size: 11px;
+  font-weight: 400;
+  opacity: 0.72;
+}
+
+/* 图生图：参考图预览行 —— 缩略图 + 文件名/操作 */
+.gen-ref {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.gen-ref-thumb {
+  width: 76px;
+  height: 76px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  /* 本地占位图可能有白底，垫一层深色免得看不清主体 */
+  background: #22272f;
+  flex: 0 0 auto;
+}
+
+.gen-ref-info {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gen-ref-name {
+  font-size: 12px;
+  color: var(--text-dim, #7a8699);
+  /* 文件名可能很长，单行省略，别把布局撑破 */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lt-tabs {
+  display: inline-flex;
+  /* 三个以上页签要能换行 —— 本地工具已经到 6 个（去水印/裁剪旋转/加水印/改尺寸/亮度对比/导出） */
+  flex-wrap: wrap;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 面板里的一排小按钮（旋转/翻转/复位这类成组的操作） */
+.lt-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.lt-btns .btn {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.lt-check {
+  margin: 2px 0;
+}
+
+.lt-tab {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 12px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.lt-tab:hover {
+  background: var(--elev-hover);
+  color: var(--text);
+}
+
+.lt-tab.active {
+  background: var(--primary-weak);
+  color: var(--primary);
+}
+
+.lt-scene-tag {
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  color: var(--muted);
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  padding: 2px 7px;
+}
+
+.lt-close {
+  flex: 0 0 auto;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 3px 5px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.lt-close:hover {
+  color: var(--text);
+  background: var(--elev);
+}
+
+.lt-body {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+.lt-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lt-row > span:first-child {
+  flex: 0 0 84px;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.lt-row input:not([type="range"]),
+.lt-row select {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 26px;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  padding: 0 7px;
+}
+
+.lt-row input[type="range"] {
+  flex: 1 1 auto;
+  accent-color: var(--primary);
+}
+
+.lt-inline {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.lt-inline input {
+  width: 100%;
+  min-width: 0;
+}
+
+/* 尺寸预设：小胶囊，点一下就填好尺寸 */
+.lt-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.lt-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  border: 1px solid var(--hairline);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 11px;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.lt-chip:hover {
+  background: var(--elev-hover);
+}
+
+.lt-chip.active {
+  border-color: rgba(87, 193, 255, 0.5);
+  background: var(--primary-weak);
+  color: var(--primary);
+}
+
+.lt-chip em {
+  font-style: normal;
+  font-size: 9.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.lt-chip.active em {
+  color: var(--primary);
+  opacity: 0.75;
+}
+
+/* 水印颜色：常用色块 + 取色器兜底。
+   色块而不是只放取色器 —— 取色器在深色界面上很难看清取到什么色，而且要精确拖。 */
+.lt-colors {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1 1 auto;
+}
+
+.lt-color {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--hairline-strong);
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.lt-color:hover {
+  transform: scale(1.12);
+}
+
+.lt-color.active {
+  /* 选中态用外圈光晕，而不是改色本身 —— 否则白/黑这类颜色加了边框就分不清了 */
+  box-shadow: 0 0 0 2px var(--primary);
+}
+
+.lt-color-pick {
+  width: 22px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--hairline);
+  border-radius: 5px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.lt-note {
+  margin: 0;
+  font-size: 10.5px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.lt-err {
+  font-size: 11px;
+  color: var(--danger);
+  line-height: 1.5;
+}
+
+.lt-foot {
+  padding: 7px 10px;
+  font-size: 10.5px;
+  color: var(--muted);
+  line-height: 1.5;
+  border-top: 1px solid var(--hairline);
+}
+
+/* ================================================================== */
+/* 「你想让 AI 做什么？」空态（默认不自动识别后的常态屏）                  */
+/* ================================================================== */
+
+.ai-choose {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 22px 12px;
+  text-align: center;
+}
+
+.ai-choose-title {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.ai-choose-go {
+  padding: 8px 22px;
+  font-size: 13px;
+}
+
+.ai-choose-hint {
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.75;
+}
+
+.ai-choose-hint strong {
+  color: var(--text);
+  font-weight: 500;
+}
+
+/* 计费透明：写清"点一次会怎样"，而不是含糊过去。
+   这是默认不开自动识别之后必须补上的一环 —— 用户得知道代价才能做选择。 */
+.ai-choose-cost {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 10.5px;
+  color: var(--muted);
+  line-height: 1.6;
+  text-align: left;
+}
+
+.info-note,
+.info-loading,
+.info-empty {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.7;
+  padding: 4px 0;
+}
+
+/* ================================================================== */
+/* 对话面板（围绕当前图片与 AI 多轮交谈）                                */
+/* ================================================================== */
+
+.chat-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+/* 消息列表自己滚，输入行钉在底部 */
+.chat-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 2px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chat-empty {
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.9;
+  padding: 10px 4px;
+}
+
+.chat-empty p {
+  margin: 0 0 6px;
+}
+
+.chat-hint {
+  color: var(--muted);
+}
+
+.chat-hint.dim {
+  opacity: 0.75;
+  font-size: 11.5px;
+}
+
+.chat-msg {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.chat-role {
+  flex: 0 0 30px;
+  font-size: 11px;
+  color: var(--muted);
+  padding-top: 6px;
+  text-align: center;
+}
+
+.chat-msg.user .chat-role {
+  color: var(--primary);
+}
+
+.chat-bubble {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.chat-msg.user .chat-bubble {
+  background: var(--primary-weak);
+  border-color: rgba(87, 193, 255, 0.35);
+}
+
+.chat-text {
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.chat-msg-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.chat-mini {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  font-family: inherit;
+  padding: 2px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.chat-mini:hover {
+  color: var(--text);
+  border-color: var(--primary);
+}
+
+.chat-mini.primary {
+  color: var(--primary);
+  border-color: rgba(87, 193, 255, 0.45);
+}
+
+.chat-input-row {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.chat-input {
+  flex: 1 1 auto;
+  resize: none;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12.5px;
+  line-height: 1.5;
+  padding: 8px 10px;
+  min-height: 52px;
+}
+
+.chat-input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.chat-send {
+  align-self: flex-end;
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.6;
+  margin: 4px 0 16px;
+}
+
+.modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

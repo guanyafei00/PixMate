@@ -1,0 +1,11 @@
+{
+  "version": "0.3.3",
+  "notes": "v0.3.3：质量加固——全局 ErrorBoundary 与崩溃日志（白屏变可诊断）；Rust ACL/排序单元测试；CI 增加类型检查与单测关卡；IOPaint 生命周期检查脚本",
+  "pub_date": "2026-10-10T13:26:30Z",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSNEJSM1lkaW9qdEExbXhPa0taKy85OFEyMVpyM0JoeUZub2JSb0pyMVFjZWJJZ055ZUN5bTU0aml1SFBSVStxdi9abERka1kxaWhvbktaYzY4M0xqZnpoTGN3L1RTcEFVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxNjM4NzgxCWZpbGU6UGl4TWF0ZV8wLjMuM194NjQtc2V0dXAuZXhlCmU0dGFHNUYzaGgrMEo5OHhPREtSRVFTRUhSNmJvMXVkZUQrL3BmVU4wN25PWmdsUVpDNUtiVGt3aHR2Rlo0Z3hFQTFhUS9OYzFERmtlMndRaURsOUJRPT0K",
+      "url": "https://github.com/guanyafei00/PixMate/releases/download/v0.3.3/PixMate_0.3.3_x64-setup.exe"
+    }
+  }
+}
