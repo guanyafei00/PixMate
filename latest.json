@@ -1,0 +1,11 @@
+{
+  "version": "0.3.2",
+  "notes": "v0.3.2：一键安装引擎全下载源国内镜像化（华为云/阿里云/清华/hf-mirror），国内网络安装成功率大幅提升；README 增加 SmartScreen 安装指引",
+  "pub_date": "2026-10-08T02:09:42Z",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSNEJSM1lkaW9qdE01bTZONzF0bm5MZFRkMEZUSmZxa1I1UlFSM3VlYytBbzFMYVJvcWhseTl4emtrdUJFeXdnWEJML3k2UHUrSGhkMlR1R0ZDMHU0cStYdGJ4MGJmYmcwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxNDI1MzcxCWZpbGU6UGl4TWF0ZV8wLjMuMl94NjQtc2V0dXAuZXhlCkhzKzhhN1dXTWhRaWVxK3o3R0JQempHNmdpVTZYKzBsMzEyV01ubnNpOC9yekJkeGpyQUxXZnNqTEhURnlGdUtnVEtoK3VaWldVWnZrWmplSk1TMkRRPT0K",
+      "url": "https://github.com/guanyafei00/PixMate/releases/download/v0.3.2/PixMate_0.3.2_x64-setup.exe"
+    }
+  }
+}
