@@ -1,0 +1,11 @@
+{
+  "version": "0.3.4",
+  "notes": "v0.3.4：Bug 修复 batch——多平台出图勾选判定修复（点了不生效）、AI 生成弹窗 Esc 支持+防误关、导出/另存/复制全部有结果反馈、14 处文案裸星号清理、检查更新按钮卡死修复、窄窗布局加固、产物目录一键打开",
+  "pub_date": "2026-10-10T14:59:36Z",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSNEJSM1lkaW9qdEZxVmQvV3QzOVo4amVDbjZ1dW41QTVMd2hCSWs5aGdZblhUYTJlejRIV2h6Rnp3OUVOVXVMSk1maWF6dzFubE9hb2JkYmVVRjdxT3RBZzZNTlc5R1E4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxNjQ0MzY2CWZpbGU6UGl4TWF0ZV8wLjMuNF94NjQtc2V0dXAuZXhlCnFXbkR0aWRIZTlMNkN1M2xpa0NsNzdRSFpOZUJnQUJlUjkyczIzUzQybVRZYm9YM3lPeFNUYjhUSmtUbm1qN2JRc082NmhlTEZ6cTVscVdkemV0L0RBPT0K",
+      "url": "https://github.com/guanyafei00/PixMate/releases/download/v0.3.4/PixMate_0.3.4_x64-setup.exe"
+    }
+  }
+}
