@@ -1,0 +1,11 @@
+{
+  "version": "0.3.1",
+  "notes": "v0.3.1：签名密钥轮换（v0.3.0 用户请手动安装本版本一次，之后自动更新永久生效）",
+  "pub_date": "2026-10-07T09:19:48Z",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSNEJSM1lkaW9qdENvZWxYL2Frc1RBQUk2T1hzUjd2VURVYVFrRFY4SkV4M08xVkN1djJKaVh6L3RXY05Ec0gvSnAvM3FCVXFqZDJEZ056MWFHRmVFZno2NTBiMUUvNXc4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxMzU2OTg0CWZpbGU6UGl4TWF0ZV8wLjMuMV94NjQtc2V0dXAuZXhlCklmK2krVm9uR29HL1JjdVpDU0s1aFoweE96V3A2WEVLbHJGamxFdGJDZXgvRHJUakZIZTlKa2ErWHVnYmRJY2ZocWpYM0Y3a0dPSjFldDVVTFpxaUFBPT0K",
+      "url": "https://github.com/guanyafei00/PixMate/releases/download/v0.3.1/PixMate_0.3.1_x64-setup.exe"
+    }
+  }
+}
