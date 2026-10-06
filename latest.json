@@ -1,0 +1,11 @@
+{
+  "version": "0.3.7",
+  "notes": "v0.3.7：顶栏图标化收窄——视图开关与设置改图标（悬停有完整说明），修复主按钮被窗口边缘裁切的问题",
+  "pub_date": "2026-10-11T13:15:57Z",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSNEJSM1lkaW9qdEJhTmwzK0EwLzdxbnB1ZDNPejBsalBuRVNlMGtIZGdUYmQ3N1VHamhTRjBCYUc3NXQrVlpWb0M5bnc5aE5QaUg0TklFWlljSkFWUVdQRVVmeGVSZ2dBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxNzI0NTQ5CWZpbGU6UGl4TWF0ZV8wLjMuN194NjQtc2V0dXAuZXhlCkxRcVFZWjNuMUU2cFAvYzBVaTlwWXkrZjNFL1pucXNIWGltSndBaVUrR1Y3dmRqanh6WUJmUllLcklLVlN1MStGOGhYMitzaDUwMnVkOWN4YlZHekRBPT0K",
+      "url": "https://github.com/guanyafei00/PixMate/releases/download/v0.3.7/PixMate_0.3.7_x64-setup.exe"
+    }
+  }
+}
