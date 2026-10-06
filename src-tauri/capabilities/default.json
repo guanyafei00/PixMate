@@ -1,0 +1,17 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "AI Image Viewer 默认权限：主窗口可调用文件对话框、本地设置存储，并读取本地图片（asset 协议）。",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:default",
+    "core:webview:default",
+    "core:path:default",
+    "dialog:default",
+    "store:default",
+    "updater:default"
+  ]
+}

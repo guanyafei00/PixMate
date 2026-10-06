@@ -1,0 +1,64 @@
+[package]
+name = "ai-image-viewer"
+version = "0.3.0"
+description = "AI Image Viewer - 打开即识别的轻量看图工具"
+authors = ["you"]
+edition = "2021"
+
+# 桌面端 P0 仅需 main 目标；移动端扩展时再补 lib 目标
+[[bin]]
+name = "ai-image-viewer"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[features]
+# 这个开关决定应用读「内置前端资源」还是「去连开发服务器」。
+#
+# `tauri` 的构建脚本里是这么判定的（tauri-2.11.5/build.rs:256）：
+#     let custom_protocol = has_feature("custom-protocol");
+#     let dev = !custom_protocol;
+# 也就是说：**不带这个 feature 就一定是开发模式** —— 窗口会去连
+# build.devUrl（http://localhost:1420），vite 没起就显示「localhost 拒绝连接」。
+#
+# `tauri build` 命令会在背后自动帮你带上它；但我们是用 `cargo build` 直接构建的，
+# 所以必须显式传 `--features custom-protocol`。
+# 别把它写进 [dependencies] 的 features —— 那会让 `tauri dev` 也去读内置资源，没法热更新。
+custom-protocol = ["tauri/custom-protocol"]
+
+[dependencies]
+# 必须带 protocol-asset：
+# 前端用 convertFileSrc 走 asset:// 协议直接读本地图片（与 Electron 端的 aiiv:// 对应）。
+# 只在 tauri.conf.json 里开 assetProtocol 是不够的 —— 少了这个 feature，
+# 构建脚本会直接报「features 与 tauri.conf.json 的 allowlist 不匹配」。
+# （这条是真正跑 `cargo check` 才发现的，只看代码看不出来。）
+tauri = { version = "2", features = ["protocol-asset"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-store = "2"
+tauri-plugin-updater = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", features = ["json", "multipart"] }
+tokio = { version = "1", features = ["full"] }
+base64 = "0.22"
+# 嵌入式 Python 运行时解压（IOPaint 一键安装）
+zip = { version = "0.6", default-features = false, features = ["deflate"] }
+anyhow = "1"
+# 注意：trash 这个 crate 从来没有 0.3 版本，历史写法 `trash = "0.3"` 会让 cargo
+# 直接卡在依赖解析（报 "failed to select a version"），也就是 Tauri 端根本构建不起来。
+# 实测 crates.io 上只有 1.x–5.x，当前最高 5.2.9。API 仍是 trash::delete(path)。
+trash = "5"
+# file_info 用它做文件修改时间的本地化格式（对齐 Electron 的 toLocaleString("zh-CN")）
+chrono = "0.4"
+# 缩略图持久缓存（2026-10-04）：后端生成 320px JPEG 并落盘，
+# 第二次打开同一文件夹毫秒级命中 —— 对标 Windows Photos 被吐槽最多的痛点。
+# default-features 关掉避免引入无用格式解码器（控制体积）。
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "webp"] }
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
