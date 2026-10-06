@@ -1,0 +1,12 @@
+{
+  "bundle": {
+    "targets": [
+      "app",
+      "dmg"
+    ],
+    "resources": [],
+    "macOS": {
+      "minimumSystemVersion": "10.15"
+    }
+  }
+}
