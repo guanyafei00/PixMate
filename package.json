@@ -1,0 +1,43 @@
+{
+  "name": "pixmate",
+  "private": true,
+  "version": "0.3.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "typecheck": "tsc --noEmit",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "check-all": "python scripts/check-all.py",
+    "selftest": "python scripts/selftest-check.py",
+    "tauri:check": "node scripts/tauri-check.mjs",
+    "parity-check": "node scripts/tauri-parity-check.mjs",
+    "browser-render-check": "node scripts/browser-render-check.mjs",
+    "summary-check": "node scripts/summary-check.mjs",
+    "gen:test-image": "node scripts/gen-test-image.mjs",
+    "launch-debug": "python scripts/launch-debug.py",
+    "gen:icon": "node scripts/gen-icons.mjs",
+    "gen:album": "node scripts/gen-album.mjs",
+    "gen:formats": "python scripts/gen-format-tests.py",
+    "gen:many": "python scripts/gen-many-album.py",
+    "perf:album": "python scripts/gen-perf-album.py"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "2.11.1",
+    "@tauri-apps/plugin-dialog": "^2.2.0",
+    "@tauri-apps/plugin-store": "^2.2.0",
+    "@tauri-apps/plugin-updater": "2.13.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.1.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "playwright": "^1.63.0",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  }
+}

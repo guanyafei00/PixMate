@@ -1,0 +1,11 @@
+{
+  "version": "0.3.0",
+  "notes": "更名 PixMate；新增自动/手动更新；一键安装本地 AI 去水印引擎；去水印选区偏移修复",
+  "pub_date": "2026-10-07T07:04:27Z",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSNEJSM1lkaW9qdENCUzE5dDZwR2EyNnN2c0c5V3ltM2NWcDdQVTQzeTc5RXFKeVNtbUpCbmROTDllenhWaUQySVBybmhyV3BYc2k4OGM5R3hIWmZyV2JZS0pwZGRaSVFZPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxMzU2NjY3CWZpbGU6UGl4TWF0ZV8wLjMuMF94NjQtc2V0dXAuZXhlCjhsbVNxZnNrVXJ0STNvbzNSTGZMSUE2Q0llTTEvMFFVQWhHSTE0c00vcUx6c0cwcDBmSWlwQlNGUFF0c1lCMlZ6dVpOSVN1RjdhRE1hQUdhbDNRaUJRPT0K",
+      "url": "https://github.com/guanyafei00/ai-photo-toolkit/releases/download/v0.3.0/PixMate_0.3.0_x64-setup.exe"
+    }
+  }
+}
