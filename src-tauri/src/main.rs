@@ -1552,6 +1552,63 @@ async fn probe_iopaint(base_url: &str, timeout_secs: u64) -> Option<(Option<Stri
     Some((name, None))
 }
 
+/// 解析「一键安装 / 用户手填」的启动命令。
+/// 旧实现用裸 split_whitespace()，遇到带引号路径或含空格路径会拆出错误的 exe，
+/// Windows 上表现为 os error 123（路径语法非法）。这里兼容三种写法：
+/// ① 引号包裹的 exe 路径 ② 无引号但路径含空格 ③ 无引号且无空格。
+fn parse_iopaint_cmd(cmd: &str) -> Option<(String, Vec<String>)> {
+    let s = cmd.trim();
+    if s.is_empty() {
+        return None;
+    }
+    let strip = |t: &str| t.trim_matches('"').to_string();
+
+    // ① 一键安装写入的就是这种："C:\Program Files\...\iopaint.exe" start --model=lama ...
+    if s.starts_with('"') {
+        if let Some(end) = s[1..].find('"') {
+            let exe = s[1..1 + end].to_string();
+            let rest = s[1 + end + 1..].trim();
+            let args: Vec<String> = rest
+                .split_whitespace()
+                .map(strip)
+                .filter(|a| !a.is_empty())
+                .collect();
+            return Some((exe, args));
+        }
+    }
+
+    let toks: Vec<&str> = s.split_whitespace().collect();
+    // ② 无引号但路径含空格：逐步拼接前缀，取第一个真实存在的文件作为 exe
+    for i in 1..toks.len() {
+        let cand = toks[..i].join(" ");
+        if std::path::Path::new(&cand).is_file() {
+            let args: Vec<String> = toks[i..]
+                .iter()
+                .map(|t| strip(*t))
+                .filter(|a| !a.is_empty())
+                .collect();
+            return Some((cand, args));
+        }
+    }
+    // ③ 兜底：首 token 为 exe；文件不存在时交给 spawn 给出可操作的报错
+    let exe = strip(toks[0]);
+    let args: Vec<String> = toks[1..]
+        .iter()
+        .map(|t| strip(*t))
+        .filter(|a| !a.is_empty())
+        .collect();
+    Some((exe, args))
+}
+
+/// 引擎启动命令只允许拉起 IOPaint 自身，避免渲染层借 IPC 拼任意 Command。
+/// 用户自定义路径仍可用，只要可执行文件名以 iopaint 开头。
+fn iopaint_exe_allowed(exe: &str) -> bool {
+    std::path::Path::new(exe)
+        .file_name()
+        .map(|n| n.to_string_lossy().to_lowercase().starts_with("iopaint"))
+        .unwrap_or(false)
+}
+
 #[tauri::command]
 async fn iopaint_ensure_server(args: String) -> Result<Value, String> {
     let a: IopaintEnsureArgs = serde_json::from_str(&args).map_err(|e| e.to_string())?;
@@ -1569,10 +1626,9 @@ async fn iopaint_ensure_server(args: String) -> Result<Value, String> {
         }));
     }
 
-    // ② 没在运行 → 用设置里的命令拉起（首 token 是 exe，其余是参数）
-    let mut parts = a.cmd.split_whitespace();
-    let exe = match parts.next() {
-        Some(e) => e.to_string(),
+    // ② 没在运行 → 用设置里的命令拉起（兼容带引号 / 含空格的路径）
+    let (exe, rest) = match parse_iopaint_cmd(&a.cmd) {
+        Some(v) => v,
         None => {
             return Ok(json!({
                 "ok": false, "started": false,
@@ -1580,7 +1636,16 @@ async fn iopaint_ensure_server(args: String) -> Result<Value, String> {
             }))
         }
     };
-    let rest: Vec<String> = parts.map(|s| s.to_string()).collect();
+    // 只放行 IOPaint 可执行文件：渲染层不能再借这个 IPC 拉起任意进程
+    if !iopaint_exe_allowed(&exe) {
+        return Ok(json!({
+            "ok": false, "started": false,
+            "message": format!(
+                "启动命令不是 IOPaint 可执行文件：{}。请到「设置 → 本地去水印」检查，或重新点一次「一键安装引擎」。",
+                exe
+            )
+        }));
+    }
     {
         let mut guard = IOPAINT_CHILD.lock().map_err(|e| e.to_string())?;
         if guard.is_none() {
@@ -2935,6 +3000,31 @@ async fn setup_download_multi(
     Err(format!("所有下载源均失败：{}", last_err))
 }
 
+/// 下载完整性校验：挡住「HTTP 200 但内容是 HTML 错误页 / 文件被截断」这一类
+/// 一键安装故障。ZIP 前四字节为 50 4B 03 04；嵌入式 Python 约 11MB，
+/// 低于 1MB 一律视为异常。校验失败时给出可操作提示，而不是把坏包直接丢给解压。
+fn verify_download(path: &Path, min_bytes: u64, zip_magic: bool) -> Result<(), String> {
+    let meta = std::fs::metadata(path).map_err(|e| format!("下载文件不可读：{}", e))?;
+    if meta.len() < min_bytes {
+        return Err(format!(
+            "内容仅 {} 字节（预期至少 {}），可能是镜像返回了错误页，请重试或切换网络",
+            meta.len(),
+            min_bytes
+        ));
+    }
+    if zip_magic {
+        use std::io::Read;
+        let mut head = [0u8; 4];
+        let mut f = std::fs::File::open(path).map_err(|e| e.to_string())?;
+        f.read_exact(&mut head)
+            .map_err(|_| "下载内容不是有效的 ZIP 文件".to_string())?;
+        if head != [0x50, 0x4B, 0x03, 0x04] {
+            return Err("下载内容不是有效的 ZIP 文件（镜像可能返回了 HTML 错误页），请重试".into());
+        }
+    }
+    Ok(())
+}
+
 fn unzip_all(zip_path: &Path, dest: &Path) -> Result<(), String> {
     let file = std::fs::File::open(zip_path).map_err(|e| e.to_string())?;
     let mut arch = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
@@ -2992,6 +3082,8 @@ async fn run_iopaint_setup(app: tauri::AppHandle) -> Result<String, String> {
         )
         .await?;
     }
+    verify_download(&zip_path, 1024 * 1024, true)
+        .map_err(|e| format!("嵌入式 Python 下载校验失败：{}", e))?;
     std::fs::create_dir_all(&py_dir).map_err(|e| e.to_string())?;
     unzip_all(&zip_path, &py_dir).map_err(|e| format!("解压 Python 失败: {}", e))?;
 
@@ -3012,6 +3104,8 @@ async fn run_iopaint_setup(app: tauri::AppHandle) -> Result<String, String> {
         )
         .await?;
     }
+    verify_download(&getpip, 1024, false)
+        .map_err(|e| format!("get-pip.py 下载校验失败：{}", e))?;
     let out = tokio::process::Command::new(&py_exe)
         .arg(&getpip)
         .arg("-i")
@@ -3197,6 +3291,9 @@ fn write_debug_png(args: String) -> Result<Value, String> {
 #[tauri::command]
 async fn thumbnail_data(args: String) -> Result<Value, String> {
     let a: ThumbArgs = serde_json::from_str(&args).map_err(|e| e.to_string())?;
+    // 与 file_info / list_images 保持一致：缩略图同样受授权目录约束，
+    // 避免渲染层对任意磁盘路径发起图片解码。
+    require_allowed(&a.path)?;
     let path = a.path.clone();
     let size = a.size;
     let (url, cached, ms, err) = tauri::async_runtime::spawn_blocking(move || {

@@ -2,11 +2,37 @@ name: build
 
 on:
   push:
+    branches: [main]
     tags: ["v*"]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
-  build:
+  # 校验与打包分开：以前只有打 tag 才跑 CI，日常 push 到 main 完全不触发，
+  # 导致「workflow 引用了仓库里不存在的脚本」这种错误长期没被发现。
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: install frontend deps
+        run: npm ci
+
+      - name: typecheck
+        run: node node_modules/typescript/bin/tsc --noEmit
+
+      - name: summary parser unit tests
+        run: node scripts/summary-check.mjs
+
+  release:
+    needs: verify
+    if: startsWith(github.ref, 'refs/tags/')
     strategy:
       fail-fast: false
       matrix:
@@ -30,14 +56,10 @@ jobs:
       - name: generate icon set (adds icon.icns for macOS)
         run: npx tauri icon src-tauri/icons/icon.png
 
-      - name: typecheck
-        run: node node_modules/typescript/bin/tsc --noEmit
-
-      - name: summary parser unit tests
-        run: node scripts/summary-check.mjs
-
+      # 钉到 v0 系列最后一个具体 tag（v0.6.2），行为与浮动 @v0 一致，
+      # 但消除上游漂移；跨到 v1 属于 breaking change，不在本次范围。
       - name: build (tauri)
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
