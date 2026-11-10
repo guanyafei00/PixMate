@@ -19,7 +19,7 @@ dependencies = [
 
 [[package]]
 name = "ai-image-viewer"
-version = "0.3.2"
+version = "0.3.8"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
