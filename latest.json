@@ -1,11 +1,11 @@
 {
-  "version": "0.3.7",
-  "notes": "v0.3.7：顶栏图标化收窄——视图开关与设置改图标（悬停有完整说明），修复主按钮被窗口边缘裁切的问题",
-  "pub_date": "2026-10-11T13:15:57Z",
+  "version": "0.3.8",
+  "notes": "v0.3.8：修复去水印「自动启动失败 os error 123」——启动命令里的引号现在会自动剥离，旧引擎残留路径不再导致启动失败；启动失败的错误提示改为可操作的指引",
+  "pub_date": "2026-10-17T12:23:26Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSNEJSM1lkaW9qdEJhTmwzK0EwLzdxbnB1ZDNPejBsalBuRVNlMGtIZGdUYmQ3N1VHamhTRjBCYUc3NXQrVlpWb0M5bnc5aE5QaUg0TklFWlljSkFWUVdQRVVmeGVSZ2dBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxNzI0NTQ5CWZpbGU6UGl4TWF0ZV8wLjMuN194NjQtc2V0dXAuZXhlCkxRcVFZWjNuMUU2cFAvYzBVaTlwWXkrZjNFL1pucXNIWGltSndBaVUrR1Y3dmRqanh6WUJmUllLcklLVlN1MStGOGhYMitzaDUwMnVkOWN4YlZHekRBPT0K",
-      "url": "https://github.com/guanyafei00/PixMate/releases/download/v0.3.7/PixMate_0.3.7_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSNEJSM1lkaW9qdEFLYVBKRFAvYlRvUXNiZVlVQVJHZEZWM3c5bm9TZWdXS3Vmcjk4MzlKR2FUQmY4U2RJWnMwRisvdm9jTmtpcUpMczBMVFhqMVo0SHRUdTNjQnJSeGcwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMjM5Nzk4CWZpbGU6UGl4TWF0ZV8wLjMuOF94NjQtc2V0dXAuZXhlCmluMEtmayttTUQ1MGhIY0RpaVpaRU1yd3NPWGxScHdKSGp3YVRQMjZLa1ZLd2ErYnpuczBJQmRmeWVoZlhuV21DNzRtNEdNbFJibGVQOUVhcnRGOERRPT0K",
+      "url": "https://github.com/guanyafei00/PixMate/releases/download/v0.3.8/PixMate_0.3.8_x64-setup.exe"
     }
   }
 }
