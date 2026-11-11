@@ -3822,4 +3822,111 @@ mod foundation_tests {
         assert!(PYTORCH_CPU_INDEX.contains("cpu"));
         assert!(PYTORCH_CPU_OFFICIAL.contains("whl/cpu"));
     }
+
+    // ---------- parse_iopaint_cmd（os error 123 修复的回归测试） ----------
+    // 背景：settings.json 里一键安装写入的是带引号、含空格的命令；
+    // 旧实现直接整串 spawn 导致 os error 123。这里钉死三类输入的解析行为。
+
+    #[test]
+    fn parse_quoted_path_with_spaces() {
+        // ① 一键安装写入的形式：引号包住含空格 exe + 参数
+        let (exe, args) = parse_iopaint_cmd(
+            r#""C:\Program Files\PixMate\engine\iopaint.exe" start --model=lama --device=cpu"#,
+        )
+        .expect("quoted cmd must parse");
+        assert_eq!(exe, r"C:\Program Files\PixMate\engine\iopaint.exe");
+        assert_eq!(args, vec!["start", "--model=lama", "--device=cpu"]);
+    }
+
+    #[test]
+    fn parse_quoted_path_no_args() {
+        let (exe, args) = parse_iopaint_cmd(r#""C:\My Tools\iopaint.exe""#).unwrap();
+        assert_eq!(exe, r"C:\My Tools\iopaint.exe");
+        assert!(args.is_empty());
+    }
+
+    #[test]
+    fn parse_unquoted_spaces_uses_real_file() {
+        // ② 无引号但路径含空格：逐步拼接前缀，取第一个真实存在的文件
+        let base = std::env::temp_dir().join(format!("pixmate-parse-test-{}", std::process::id()));
+        let dir = base.join("dir with space");
+        std::fs::create_dir_all(&dir).unwrap();
+        let exe_path = dir.join("iopaint.exe");
+        std::fs::write(&exe_path, b"MZ").unwrap();
+        let cmd = format!(
+            r#"{} serve --host 127.0.0.1 --port 8080"#,
+            exe_path.to_string_lossy()
+        );
+        let (exe, args) = parse_iopaint_cmd(&cmd).expect("spaced cmd must parse");
+        assert_eq!(exe, exe_path.to_string_lossy());
+        assert_eq!(args, vec!["serve", "--host", "127.0.0.1", "--port", "8080"]);
+        std::fs::remove_dir_all(&base).ok();
+    }
+
+    #[test]
+    fn parse_plain_command() {
+        let (exe, args) =
+            parse_iopaint_cmd("iopaint start --model=lama --device=cpu").unwrap();
+        assert_eq!(exe, "iopaint");
+        assert_eq!(args, vec!["start", "--model=lama", "--device=cpu"]);
+    }
+
+    #[test]
+    fn parse_empty_and_whitespace_none() {
+        assert!(parse_iopaint_cmd("").is_none());
+        assert!(parse_iopaint_cmd("   ").is_none());
+    }
+
+    // ---------- iopaint_exe_allowed（进程白名单） ----------
+    #[test]
+    fn exe_allowed_accepts_iopaint_variants() {
+        assert!(iopaint_exe_allowed("iopaint.exe"));
+        assert!(iopaint_exe_allowed("IOPaint.exe")); // Windows 大小写不敏感
+        assert!(iopaint_exe_allowed(r"C:\Program Files\x\iopaint-1.6.0.exe"));
+        assert!(iopaint_exe_allowed("iopaint")); // 无扩展名（POSIX 风格）
+    }
+
+    #[test]
+    fn exe_allowed_rejects_non_iopaint() {
+        assert!(!iopaint_exe_allowed("cmd.exe"));
+        assert!(!iopaint_exe_allowed("powershell.exe"));
+        assert!(!iopaint_exe_allowed("evil.exe"));
+        assert!(!iopaint_exe_allowed("")); // 空串必须拒绝
+        // 伪装成目录名带 iopaint、但可执行文件本身不是：file_name 才算数
+        assert!(!iopaint_exe_allowed(r"C:\iopaint\cmd.exe"));
+    }
+
+    // ---------- verify_download（下载完整性） ----------
+    #[test]
+    fn verify_rejects_tiny_file() {
+        let p = std::env::temp_dir().join(format!("pixmate-vd-tiny-{}.bin", std::process::id()));
+        std::fs::write(&p, b"PK\x03\x04").unwrap(); // 有魔数但小于 1MB
+        assert!(verify_download(&p, 1024 * 1024, true, None).is_err());
+        std::fs::remove_file(&p).ok();
+    }
+
+    #[test]
+    fn verify_rejects_html_error_page() {
+        // 镜像返回 200 但内容是 HTML 错误页：ZIP 魔数校验必须拦下
+        let p = std::env::temp_dir().join(format!("pixmate-vd-html-{}.bin", std::process::id()));
+        let html = format!("{:>1027}", "<html>404 Not Found</html>"); // > 1KB
+        std::fs::write(&p, html).unwrap();
+        assert!(verify_download(&p, 1024, true, None).is_err());
+        // 同一文件若不做 ZIP 校验（get-pip.py 场景）则放行
+        assert!(verify_download(&p, 1024, false, None).is_ok());
+        std::fs::remove_file(&p).ok();
+    }
+
+    #[test]
+    fn verify_sha256_match_and_mismatch() {
+        // SHA-256("abc") 的公开测试向量，非循环验证
+        let p = std::env::temp_dir().join(format!("pixmate-vd-sha-{}.bin", std::process::id()));
+        std::fs::write(&p, b"abc").unwrap();
+        let good = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+        assert!(verify_download(&p, 1, false, Some(good)).is_ok());
+        assert!(verify_download(&p, 1, false, Some(&good.replace('a', "b"))).is_err());
+        // 大小写不敏感比对
+        assert!(verify_download(&p, 1, false, Some(&good.to_uppercase())).is_ok());
+        std::fs::remove_file(&p).ok();
+    }
 }
