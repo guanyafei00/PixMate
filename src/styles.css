@@ -2668,3 +2668,75 @@ button.ai-btn {
   padding-left: 8px;
   padding-right: 8px;
 }
+
+/* ── 隐私分级标记（B5 / A6：动作级本地优先 / 需联网） ───────────────
+   统一话术 + 统一配色：绿=本地安全、灰=需联网。浅色主题自动继承 --ok / --muted 等变量。 */
+.privacy-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 500;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.privacy-badge .pb-icon {
+  font-size: 11px;
+  line-height: 1;
+}
+.pb-local {
+  color: var(--ok);
+  background: var(--ok-weak);
+  border-color: var(--ok-border);
+}
+.pb-cloud {
+  color: var(--muted);
+  background: var(--elev);
+  border-color: var(--hairline);
+}
+.pb-optional {
+  color: var(--muted);
+  background: transparent;
+  border-color: var(--hairline);
+}
+
+/* ── 引擎状态徽标（B1：首装引擎四态可视化，顶栏） ─────────────────── */
+.engine-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-right: 6px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--hairline);
+  background: var(--elev);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.engine-badge:hover {
+  background: var(--elev-hover);
+}
+.engine-badge .eb-icon {
+  font-size: 12px;
+  line-height: 1;
+}
+.eb-ok {
+  color: var(--ok);
+  border-color: var(--ok-border);
+  background: var(--ok-weak);
+}
+.eb-warn {
+  color: var(--danger);
+  border-color: rgba(255, 97, 97, 0.35);
+  background: rgba(255, 97, 97, 0.1);
+}
+.eb-wait {
+  color: var(--muted);
+}

@@ -28,6 +28,7 @@ import {
   BatchResult,
 } from "../lib/localTransforms";
 import { iopaintErase } from "../lib/iopaintService";
+import PrivacyBadge from "./PrivacyBadge";
 import { writeProcessed, loadSettings, iopaintProbe, iopaintEnsureServer, iopaintAutoSetup, iopaintSetupStatus } from "../lib/api";
 
 /** 多平台出图预设（P04 自媒体物料视角）：id 对应输出文件名后缀 */
@@ -343,6 +344,7 @@ export default function LocalToolsPanel({
           ))}
         </span>
         <span className="lt-scene-tag">{scene.name}</span>
+        <PrivacyBadge variant="local" />
         <button className="lt-close" onClick={onClose} title="收起">
           ✕
         </button>

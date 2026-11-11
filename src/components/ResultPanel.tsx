@@ -3,6 +3,7 @@ import { AnalyzeMode, MODE_LABELS, MODE_THINKING, toPlainText } from "../lib/pro
 import { ChatMsg } from "../lib/api";
 import { splitSummary } from "../lib/summary";
 import ChatPanel from "./ChatPanel";
+import PrivacyBadge from "./PrivacyBadge";
 
 /**
  * 识别结果面板 —— 交互约定（借鉴 Typeless/Wispr Flow 类语音输入软件）：
@@ -140,6 +141,7 @@ export default function ResultPanel({
         <span className="result-title">
           <span className="ai-dot" /> AI 识别
         </span>
+        <PrivacyBadge variant="cloud" />
         {imageName && <span className="result-file">{imageName}</span>}
       </div>
 

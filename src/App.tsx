@@ -18,6 +18,7 @@ import {
   revokeUrl,
   grantPath,
   isRealPath,
+  iopaintProbe,
   itemFromFile,
   basename,
   itemFromPath,
@@ -51,6 +52,7 @@ import InfoPanel from "./components/InfoPanel";
 import ResultPanel from "./components/ResultPanel";
 import SettingsPanel from "./components/SettingsPanel";
 import { EditPhase } from "./components/EditResultBar";
+import EngineStatusBadge, { type EngineState } from "./components/EngineStatusBadge";
 
 const isMac = navigator.platform.toLowerCase().includes("mac");
 const mod = (e: KeyboardEvent) => (isMac ? e.metaKey : e.ctrlKey);
@@ -72,6 +74,14 @@ export default function App() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [needSetup, setNeedSetup] = useState(false);
   const [mode, setMode] = useState<AnalyzeMode>("describe");
+
+  /**
+   * 本地去水印引擎（IOPaint）运行状态：顶栏徽标用它给用户一眼看到「能去水印了没」。
+   * 只在桌面版探测（浏览器预览没有本地引擎概念）。LocalToolsPanel 去水印页签里那套
+   * 完整的「未安装→安装中→已就绪→失败」装机流程保留不动，这里只把结论提到顶栏，
+   * 让用户不必点进页签才知道引擎状态。
+   */
+  const [engineState, setEngineState] = useState<EngineState>({ status: "unknown" });
 
   /* ---- AI 视觉编辑（P1.5）状态 ---- */
   /** 选区以「原图像素坐标」为唯一真源；显示时再换算回屏幕坐标，缩放平移都不会错位 */
@@ -381,6 +391,29 @@ const scene = getScene(sceneId);
     mq.addEventListener?.("change", onChange);
     return () => mq.removeEventListener?.("change", onChange);
   }, []);
+
+  /**
+   * 顶栏引擎徽标的探活：设置一就绪就探一次本地 IOPaint 服务。
+   * 只探活（秒级 HTTP 查询，不拉起、不占壳层进程锁），结论给徽标用；
+   * 真正的拉起/安装仍在 LocalToolsPanel 去水印页签里由用户触发。
+   */
+  useEffect(() => {
+    if (BROWSER_MODE) return; // 浏览器预览无本地引擎概念
+    let live = true;
+    (async () => {
+      try {
+        const s = settings ?? (await loadSettings());
+        const baseUrl = (s?.iopaint_url || "").trim() || "http://127.0.0.1:8080";
+        const p = await iopaintProbe(baseUrl, s?.iopaint_cmd || "");
+        if (live) setEngineState(p.ok ? { status: "ready" } : { status: "missing" });
+      } catch {
+        if (live) setEngineState({ status: "missing" });
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [settings]);
 
   /** Ctrl+K / Cmd+K 呼出命令面板（D 方案：搜索式万能出口） */
   useEffect(() => {
@@ -1277,6 +1310,13 @@ const scene = getScene(sceneId);
               打开图片
             </button>
           </div>
+          {/* 引擎状态：桌面版才显示（浏览器预览无本地引擎概念） */}
+          {!BROWSER_MODE && (
+            <EngineStatusBadge
+              state={engineState}
+              onOpen={() => openToolsTab("inpaint")}
+            />
+          )}
           {/* 系统组 */}
           <div className="grp">
             <button
