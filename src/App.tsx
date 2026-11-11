@@ -1352,6 +1352,11 @@ const scene = getScene(sceneId);
               void handleOpenFolder();
             }}
             onDismiss={dismissOnboarding}
+            engineState={BROWSER_MODE ? undefined : engineState}
+            onEngine={() => {
+              dismissOnboarding();
+              openToolsTab("inpaint");
+            }}
           />
         )}
         {railOpen && folder && folder.items.length > 1 && (

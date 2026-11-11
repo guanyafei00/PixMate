@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { EditAction } from "../lib/editActions";
+import PrivacyBadge from "./PrivacyBadge";
 
 /**
  * 选区浮出的 AI 编辑工具条。
@@ -105,8 +106,11 @@ export default function SelectionToolbar({
             ))}
           </div>
           <div className="sel-foot">
-            由「{providerName}」处理 · <strong>图片会上传到该服务商</strong>
-            {!supportsSelection && " · 该服务商不支持局部编辑"}
+            <PrivacyBadge variant="cloud" />
+            <span>
+              由「{providerName}」处理 · <strong>图片会上传到该服务商</strong>
+              {!supportsSelection && " · 该服务商不支持局部编辑"}
+            </span>
           </div>
         </>
       ) : (

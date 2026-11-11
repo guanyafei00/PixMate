@@ -32,6 +32,7 @@ import {
   type ImageModelProbeResult,
 } from "../lib/api";
 import { fetchModels, describeProbe } from "../lib/localService";
+import PrivacyBadge from "./PrivacyBadge";
 
 const SIZES = [
   { v: "512x512", label: "方图 512×512（最快）" },
@@ -416,7 +417,13 @@ export default function GenerateDialog({
     >
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <h2>AI 生成配图</h2>
+          <div className="modal-head-main">
+            <h2>AI 生成配图</h2>
+            {/* 动作级隐私标记：生图把提示词（图生图还有参考图）发送到用户网关 */}
+            <PrivacyBadge variant="cloud">
+              {isImg2Img ? "需联网 · 提示词与参考图会发送给你的网关" : "需联网 · 提示词会发送给你的网关"}
+            </PrivacyBadge>
+          </div>
           <button className="icon-btn" onClick={onClose} title="关闭 (Esc)">
             ✕
           </button>

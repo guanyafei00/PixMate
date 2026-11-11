@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ChatMsg } from "../lib/api";
+import PrivacyBadge from "./PrivacyBadge";
 
 /**
  * 「对话」面板：和 AI 围绕当前图片多轮交谈。
@@ -120,6 +121,10 @@ export default function ChatPanel({
         {error && <div className="error-box">⚠️ {error}</div>}
       </div>
 
+      {/* 动作级隐私标记：对话会把当前图片与消息一起发给所选模型（B5 一致话术） */}
+      <div className="chat-privacy-row">
+        <PrivacyBadge variant="cloud" />
+      </div>
       <div className="chat-input-row">
         <textarea
           ref={inputRef}
