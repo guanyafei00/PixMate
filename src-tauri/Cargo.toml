@@ -55,6 +55,8 @@ chrono = "0.4"
 # 第二次打开同一文件夹毫秒级命中 —— 对标 Windows Photos 被吐槽最多的痛点。
 # default-features 关掉避免引入无用格式解码器（控制体积）。
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "webp"] }
+# 一键安装：嵌入式 Python 下载包的 SHA-256 完整性校验（A3）
+sha2 = "0.10"
 
 [profile.release]
 panic = "abort"

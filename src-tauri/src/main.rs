@@ -1477,6 +1477,16 @@ fn grant_root(app: Option<&tauri::AppHandle>, raw: &str) {
 /// 分离自 path_allowed，使 ACL 边界逻辑可在不触碰全局状态的情况下被单测覆盖。
 fn path_allowed_against(roots: &[String], raw: &str) -> bool {
     let cand = std::fs::canonicalize(raw).unwrap_or_else(|_| std::path::PathBuf::from(raw));
+    // 【ACL 加固，ACL 测试首次运行发现】canonicalize 成功时输出已解析掉所有 ..；
+    // 但路径不存在时 canonicalize 失败、回退到原始字符串 —— 原始串可能携带
+    // `..\..\` 穿越组件却仍以授权根开头，纯前缀比对会误放行。fail-closed：
+    // 回退路径含 .. 组件一律拒绝（真实存在的合法路径 canonicalize 不会失败）。
+    if cand
+        .components()
+        .any(|c| matches!(c, std::path::Component::ParentDir))
+    {
+        return false;
+    }
     let cs = cand.to_string_lossy().to_lowercase();
     roots.iter().any(|root| {
         let r = root.to_lowercase();
@@ -2969,6 +2979,11 @@ const MIRROR_PYTHON_EMBED: &[&str] = &[
     "https://mirrors.huaweicloud.com/python/3.10.11/python-3.10.11-embed-amd64.zip",
     "https://www.python.org/ftp/python/3.10.11/python-3.10.11-embed-amd64.zip",
 ];
+/// python-3.10.11-embed-amd64.zip 的真实 SHA-256（A3）。
+/// 2026-11-11 用 python.org 官方源与华为云镜像双源下载交叉验证，两源字节完全一致；
+/// python.org 归档文件内容永不变化，锁这个哈希是稳定的。
+const PYTHON_EMBED_SHA256: &str =
+    "608619f8619075629c9c69f361352a0da6ed7e62f83a0e19c63e0ea32eb7629d";
 const MIRROR_GETPIP: &[&str] = &[
     "https://mirrors.aliyun.com/pypi/get-pip.py",
     "https://bootstrap.pypa.io/get-pip.py",
@@ -3002,8 +3017,16 @@ async fn setup_download_multi(
 
 /// 下载完整性校验：挡住「HTTP 200 但内容是 HTML 错误页 / 文件被截断」这一类
 /// 一键安装故障。ZIP 前四字节为 50 4B 03 04；嵌入式 Python 约 11MB，
-/// 低于 1MB 一律视为异常。校验失败时给出可操作提示，而不是把坏包直接丢给解压。
-fn verify_download(path: &Path, min_bytes: u64, zip_magic: bool) -> Result<(), String> {
+/// 低于 1MB 一律视为异常。expected_sha256 传 Some 时再做整包哈希比对
+/// （用于 python.org 归档这类内容永不变化的稳定文件；get-pip.py 这类会随
+/// 上游发版更新的文件传 None，避免锁哈希反而把未来用户锁死）。校验失败时给出
+/// 可操作提示，而不是把坏包直接丢给解压。
+fn verify_download(
+    path: &Path,
+    min_bytes: u64,
+    zip_magic: bool,
+    expected_sha256: Option<&str>,
+) -> Result<(), String> {
     let meta = std::fs::metadata(path).map_err(|e| format!("下载文件不可读：{}", e))?;
     if meta.len() < min_bytes {
         return Err(format!(
@@ -3022,7 +3045,34 @@ fn verify_download(path: &Path, min_bytes: u64, zip_magic: bool) -> Result<(), S
             return Err("下载内容不是有效的 ZIP 文件（镜像可能返回了 HTML 错误页），请重试".into());
         }
     }
+    if let Some(expected) = expected_sha256 {
+        let actual = file_sha256(path)?;
+        if !actual.eq_ignore_ascii_case(expected) {
+            return Err(format!(
+                "下载内容 SHA-256 校验失败（预期 {}，实际 {}）。镜像可能被篡改或返回了错误内容，请重试或切换网络",
+                &expected[..16],
+                &actual[..16.min(actual.len())]
+            ));
+        }
+    }
     Ok(())
+}
+
+/// 流式计算文件 SHA-256（下载包最大 11MB，64KB 缓冲足够）。
+fn file_sha256(path: &Path) -> Result<String, String> {
+    use sha2::{Digest, Sha256};
+    use std::io::Read;
+    let mut f = std::fs::File::open(path).map_err(|e| e.to_string())?;
+    let mut hasher = Sha256::new();
+    let mut buf = [0u8; 65536];
+    loop {
+        let n = f.read(&mut buf).map_err(|e| e.to_string())?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    Ok(format!("{:x}", hasher.finalize()))
 }
 
 fn unzip_all(zip_path: &Path, dest: &Path) -> Result<(), String> {
@@ -3082,7 +3132,7 @@ async fn run_iopaint_setup(app: tauri::AppHandle) -> Result<String, String> {
         )
         .await?;
     }
-    verify_download(&zip_path, 1024 * 1024, true)
+    verify_download(&zip_path, 1024 * 1024, true, Some(PYTHON_EMBED_SHA256))
         .map_err(|e| format!("嵌入式 Python 下载校验失败：{}", e))?;
     std::fs::create_dir_all(&py_dir).map_err(|e| e.to_string())?;
     unzip_all(&zip_path, &py_dir).map_err(|e| format!("解压 Python 失败: {}", e))?;
@@ -3104,7 +3154,7 @@ async fn run_iopaint_setup(app: tauri::AppHandle) -> Result<String, String> {
         )
         .await?;
     }
-    verify_download(&getpip, 1024, false)
+    verify_download(&getpip, 1024, false, None)
         .map_err(|e| format!("get-pip.py 下载校验失败：{}", e))?;
     let out = tokio::process::Command::new(&py_exe)
         .arg(&getpip)
@@ -3117,15 +3167,34 @@ async fn run_iopaint_setup(app: tauri::AppHandle) -> Result<String, String> {
     if !out.status.success() {
         return Err(format!("pip 初始化失败: {}", trim_err(&String::from_utf8_lossy(&out.stderr))));
     }
+    // get-pip 装出的 pip 可能是旧版：实测 aliyun 镜像派发的 get-pip.py 仍是旧版
+    // （装出的 pip 不支持 --dry-run 等 22.2+ 能力，依赖解析行为也落后）。
+    // 显式升级一次，保证后续 torch / iopaint 解析行为与官方一致；失败不阻断装机。
+    let _ = tokio::process::Command::new(&py_exe)
+        .args([
+            "-m",
+            "pip",
+            "install",
+            "-U",
+            "pip",
+            "-i",
+            PYPI_MIRROR,
+            "--no-warn-script-location",
+        ])
+        .output()
+        .await;
 
     // 步骤 3：先装 CPU 版 PyTorch —— 若不指定，pip 会拉 2GB+ 的 CUDA 版
+    // 【A3 版本锁】torch==2.14.1：2026-11-11 用同款 Python 3.10 embed + pip 26.3
+    // 对阿里云 CPU 源做真实解析的结果（torch-2.14.1+cpu）。锁版本让装机可重现，
+    // 避免上游发新版后未经测试的组合直接砸到用户；升级时人工重跑解析再改。
     emit_setup(&app, 3, "安装 PyTorch CPU 版（约 200MB，需几分钟）…");
     let out = tokio::process::Command::new(&py_exe)
         .args([
             "-m",
             "pip",
             "install",
-            "torch",
+            "torch==2.14.1",
             "--index-url",
             // 阿里云镜像了 pytorch 官方 CPU wheels；官方源作回退由 pip 额外源承担
             PYTORCH_CPU_INDEX,
@@ -3144,13 +3213,14 @@ async fn run_iopaint_setup(app: tauri::AppHandle) -> Result<String, String> {
     }
 
     // 步骤 4：安装 IOPaint
+    // 【A3 版本锁】iopaint==1.6.0：同上真实解析结果，依赖树与 torch 2.14.1 兼容。
     emit_setup(&app, 4, "安装 IOPaint（约 100MB）…");
     let out = tokio::process::Command::new(&py_exe)
         .args([
             "-m",
             "pip",
             "install",
-            "iopaint",
+            "iopaint==1.6.0",
             "-i",
             PYPI_MIRROR,
             "--no-warn-script-location",
@@ -3631,16 +3701,30 @@ mod foundation_tests {
 
     // ---------- ACL 边界 ----------
     /// 造临时目录结构并注入 roots，跑断言后清理。
+    /// 【2026-11-11 修复】此前 `f(..., base)` 把 base 按值移进闭包后又 `&base` 清理，
+    /// E0382 从未通过编译 —— 即这些 ACL 安全测试自写入以来从未真正运行过
+    /// （本机工具链此前编译不了 test 目标，遮住了这个错误）。
+    /// 临时目录带自增序号，避免并行测试共用同一目录互相删除。
     fn with_acl_roots(f: impl FnOnce(&[String], std::path::PathBuf)) {
-        let base = std::env::temp_dir().join(format!("pixmate-acl-test-{}", std::process::id()));
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static ACL_SEQ: AtomicUsize = AtomicUsize::new(0);
+        let n = ACL_SEQ.fetch_add(1, Ordering::Relaxed);
+        let base = std::env::temp_dir().join(format!(
+            "pixmate-acl-test-{}-{}",
+            std::process::id(),
+            n
+        ));
         let root = base.join("root");
         let sub = root.join("sub");
         std::fs::create_dir_all(&sub).unwrap();
         std::fs::write(root.join("a.txt"), "x").unwrap();
         std::fs::write(sub.join("b.txt"), "x").unwrap();
-        let out = f(&[root.to_string_lossy().to_string()], base);
+        // 与 grant_root 一致：注入前 canonicalize（Windows 返回 \\?\ verbatim 前缀路径）。
+        // path_allowed_against 两侧都必须是 canonicalize 后的形式 —— 此前测试注入裸路径，
+        // 前缀对不上导致 4 条 ACL 测试假失败（根因：测试从未真正编译运行过）。
+        let rc = std::fs::canonicalize(&root).unwrap();
+        f(&[rc.to_string_lossy().to_string()], base.clone());
         std::fs::remove_dir_all(&base).ok();
-        out
     }
 
     #[test]
