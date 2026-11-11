@@ -108,7 +108,12 @@ export async function iopaintErase(
   if (!ensured.ok) {
     throw new Error(
       (ensured.message || "本地 IOPaint 服务未就绪") +
-        "\n→ 也可以手动双击项目里的「启动IOPaint.cmd」把服务跑起来再试。"
+        // 2026-11-11 修正：原提示让用户「双击项目里的启动IOPaint.cmd」——
+        // 那是作者本机的开发辅助文件（含硬编码本机路径，被 .git/info/exclude
+        // 刻意排除，不入库），打包用户和克隆仓库的贡献者都没有这个文件，
+        // 照做必然找不到。改为指向应用内真实存在的两条恢复路径。
+        "\n→ 可到「本地去水印」页签点「一键安装本地 AI 引擎」重装，" +
+        "或到「设置 → 本地去水印」检查启动命令后重试。"
     );
   }
   const maskDataUrl = await buildInpaintMask(src, rect, opts);

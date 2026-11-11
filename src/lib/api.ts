@@ -218,12 +218,12 @@ export function getDefaultSettings(): Settings {
     auto_analyze: false,
     // 本地 IOPaint（LaMa 去水印引擎）：默认装在 D 盘独立 venv（C 盘空间紧张，实测如此）
     iopaint_url: "http://127.0.0.1:8080",
-    /* 这条命令必须与项目里的「启动IOPaint.cmd」保持一致 —— 实测结论：
-       **少了 `--host=127.0.0.1` 服务就起不来**（表现为端口 8080 永不监听，
-       一直等到 120 秒超时）。这是我踩过的坑，别再删这个参数。
-       另外 XDG_CACHE_HOME 环境变量也由 .cmd 设置（模型下载位置），
-       软件拉起时没设它，会退回 C 盘默认缓存 —— 功能不受影响，
-       但模型可能重复下一份。 */
+    /* 【2026-11-11 注释修正】原注释说这条命令必须与项目里的「启动IOPaint.cmd」
+       保持一致 —— 但该 cmd 是作者本机的开发辅助文件（硬编码本机 venv 路径，
+       被 .git/info/exclude 刻意排除，不入库），不能作为对用户的承诺。
+       这里的默认值语义自洽：iopaint.exe 在 PATH 里可解析（parse_iopaint_cmd
+       兜底③），--host=127.0.0.1 必须保留 —— 实测少了它服务起不来
+       （表现为端口 8080 永不监听，一直等到 120 秒超时）。别删这个参数。 */
     iopaint_cmd:
       "iopaint.exe start --model=lama --device=cpu --port=8080 --host=127.0.0.1",
     iopaint_keep_running: false,
