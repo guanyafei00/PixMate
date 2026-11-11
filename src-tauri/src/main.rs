@@ -1759,6 +1759,37 @@ async fn iopaint_ensure_server(args: String) -> Result<Value, String> {
     Ok(result)
 }
 
+/// 只读探测本机独立显卡（P0「显卡优雅降级」的第一步）。
+///
+/// 用 `nvidia-smi` 查询（N 卡用户装了驱动就必有）；不存在 / 超时 / 失败
+/// 一律返回 detected=false。探测结果**只用于 UI 提示文案**（告诉用户当前
+/// 是 CPU 模式、预期耗时多少），绝不阻断去水印主流程 —— 探测不到显卡
+/// 不是错误，是绝大多数用户的常态。
+///
+/// 注意：当前引擎链路是刻意 CPU-only（CPU 版 torch + --device=cpu），
+/// 探测到 N 卡也不改变行为，只为后续「GPU 加速版」规划提供依据。
+#[tauri::command]
+async fn gpu_info() -> Result<Value, String> {
+    let out = tokio::process::Command::new("nvidia-smi")
+        .args(["--query-gpu=name,memory.total", "--format=csv,noheader"])
+        .output()
+        .await;
+    let detected = match &out {
+        Ok(o) if o.status.success() => {
+            let s = String::from_utf8_lossy(&o.stdout);
+            s.lines().any(|l| !l.trim().is_empty())
+        }
+        _ => false,
+    };
+    if !detected {
+        return Ok(json!({ "detected": false }));
+    }
+    let output = out.unwrap();
+    let s = String::from_utf8_lossy(&output.stdout);
+    let name = s.lines().next().unwrap_or("").trim().to_string();
+    Ok(json!({ "detected": true, "name": name }))
+}
+
 #[tauri::command]
 async fn iopaint_inpaint(args: String) -> Result<Value, String> {
     let a: IopaintArgs = serde_json::from_str(&args).map_err(|e| e.to_string())?;
@@ -3675,6 +3706,7 @@ fn main() {
             write_temp_image,
             iopaint_auto_setup,
             iopaint_setup_status,
+            gpu_info,
             write_crash_log
         ]);
     dlog("builder 组装完成，准备 run");

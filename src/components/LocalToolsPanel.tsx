@@ -29,7 +29,7 @@ import {
 } from "../lib/localTransforms";
 import { iopaintErase } from "../lib/iopaintService";
 import PrivacyBadge from "./PrivacyBadge";
-import { writeProcessed, loadSettings, iopaintProbe, iopaintEnsureServer, iopaintAutoSetup, iopaintSetupStatus } from "../lib/api";
+import { writeProcessed, loadSettings, iopaintProbe, iopaintEnsureServer, iopaintAutoSetup, iopaintSetupStatus, gpuInfo } from "../lib/api";
 
 /** 多平台出图预设（P04 自媒体物料视角）：id 对应输出文件名后缀 */
 const PLATFORM_PRESETS = [
@@ -119,6 +119,33 @@ export default function LocalToolsPanel({
   }, [initialTab]);
   const [err, setErr] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
+  /**
+   * 【显卡优雅降级 P0#3】CPU 模式的真实预期管理：
+   * - gpu：只读探测（N 卡走 nvidia-smi），探测失败 = 没卡，不影响任何功能；
+   * - elapsed：AI 处理中按钮上的实时秒数 —— 静态「处理中」最伤信任，
+   *   数字在跳用户就知道没卡死；
+   * - lastElapsed：完成后回显真实耗时，把「约几秒」变成「本次 3.2 秒」。
+   */
+  const [gpu, setGpu] = useState<{ detected: boolean; name?: string } | null>(null);
+  const [elapsed, setElapsed] = useState(0);
+  const [lastElapsed, setLastElapsed] = useState<number | null>(null);
+  useEffect(() => {
+    let live = true;
+    gpuInfo()
+      .then((g) => {
+        if (live) setGpu(g);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (!working) return;
+    const t0 = performance.now();
+    const timer = setInterval(() => setElapsed((performance.now() - t0) / 1000), 500);
+    return () => clearInterval(timer);
+  }, [working]);
   const [wm, setWm] = useState<WatermarkOptions>(WATERMARK_DEFAULTS);
   const [size, setSize] = useState<{ w: number; h: number; mode: "fit" | "contain" | "cover" | "stretch" }>(
     { w: 1242, h: 1656, mode: "fit" }
@@ -228,12 +255,14 @@ export default function LocalToolsPanel({
   const runLocal = async (fn: (dataUrl: string) => Promise<string>, label: string) => {
     setErr(null);
     setWorking(true);
+    const t0 = performance.now();
     try {
       const dataUrl = await urlToDataUrl(sourceUrl);
       onProduce(await fn(dataUrl), label);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
+      setLastElapsed((performance.now() - t0) / 1000);
       setWorking(false);
     }
   };
@@ -600,7 +629,9 @@ export default function LocalToolsPanel({
                     ip.autoMask ? "本地去水印（自动识别）" : "本地去水印（整块）"
                   ))}>
               {working
-                ? engine === "iopaint" ? "AI 处理中（本地模型）…" : "处理中…"
+                ? engine === "iopaint"
+                  ? `AI 处理中（本地模型）… ${elapsed.toFixed(0)}s`
+                  : "处理中…"
                 : engine === "iopaint" ? "AI 去掉（本地免费）" : "本地去掉"}
             </button>
             {engine === "builtin" ? (
@@ -618,6 +649,18 @@ export default function LocalToolsPanel({
                 在本机跑 LaMa 模型（IOPaint）：复杂纹理能重建出真实细节，
                 图片不出本机、不花钱、不用 Key。CPU 推理约几秒到十几秒；
                 服务没启动时应用会自动拉起（首次要下载约 200MB 模型，只此一次）。
+                {lastElapsed != null && (
+                  <>
+                    <br />
+                    本次用时 {lastElapsed.toFixed(1)} 秒（CPU 模式）。
+                  </>
+                )}
+                {gpu?.detected && (
+                  <>
+                    <br />
+                    检测到独立显卡（{gpu.name}）：当前引擎为 CPU 模式，GPU 加速版在计划中。
+                  </>
+                )}
               </p>
             )}
           </>

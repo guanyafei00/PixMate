@@ -432,6 +432,22 @@ export async function thumbnailData(
  * 端口有没有被占。实测这台机器上 `iopaint start` 拉起后 8080 从未监听，
  * 只说「没在运行」用户没法判断该查什么。
  */
+/**
+ * 只读探测本机独立显卡（N 卡，走 nvidia-smi）。
+ *
+ * 探测不到不是错误 —— 绝大多数用户就是没有独立显卡；结果只用于
+ * 去水印面板的耗时预期文案（CPU 模式提示 + GPU 加速版规划展示），
+ * 绝不阻断主流程。
+ */
+export async function gpuInfo(): Promise<{ detected: boolean; name?: string }> {
+  if (!isTauri) return { detected: false };
+  try {
+    return await invoke("gpu_info");
+  } catch {
+    return { detected: false };
+  }
+}
+
 export async function iopaintProbe(
   baseUrl: string,
   cmd?: string
