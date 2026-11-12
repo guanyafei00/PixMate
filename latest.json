@@ -1,11 +1,11 @@
 {
-  "version": "0.3.8",
-  "notes": "v0.3.8：修复去水印「自动启动失败 os error 123」——启动命令里的引号现在会自动剥离，旧引擎残留路径不再导致启动失败；启动失败的错误提示改为可操作的指引",
-  "pub_date": "2026-10-17T12:23:26Z",
+  "version": "0.3.9",
+  "notes": "v0.3.9：安装与安全加固——去水印引擎下载带完整性校验（镜像返回错误页会明确报错），启动命令含引号/空格路径自动正确解析，PyTorch/IOPaint 版本锁让装机可重现；文件访问控制 fail-closed 加固；全部 AI 入口新增隐私分级标记（本地/需联网一目了然），顶栏与首启引导显示本地引擎状态",
+  "pub_date": "2026-11-12T13:36:59Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSNEJSM1lkaW9qdEFLYVBKRFAvYlRvUXNiZVlVQVJHZEZWM3c5bm9TZWdXS3Vmcjk4MzlKR2FUQmY4U2RJWnMwRisvdm9jTmtpcUpMczBMVFhqMVo0SHRUdTNjQnJSeGcwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMjM5Nzk4CWZpbGU6UGl4TWF0ZV8wLjMuOF94NjQtc2V0dXAuZXhlCmluMEtmayttTUQ1MGhIY0RpaVpaRU1yd3NPWGxScHdKSGp3YVRQMjZLa1ZLd2ErYnpuczBJQmRmeWVoZlhuV21DNzRtNEdNbFJibGVQOUVhcnRGOERRPT0K",
-      "url": "https://github.com/guanyafei00/PixMate/releases/download/v0.3.8/PixMate_0.3.8_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSNEJSM1lkaW9qdEJRVzBNV1lqdHVMSTN1Q3hHeFNOTkwwVzVva3d4a2hQTW9KSHBlK2pQekRhZTl3TTdkOEhnNzBWZzRZOHVhUGw1QU1Ic1hKNFNhc1RtMEE1QXArMndVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0NDkwNjA3CWZpbGU6UGl4TWF0ZV8wLjMuOV94NjQtc2V0dXAuZXhlCm1MaERnMWxaaHl5K1lyeThSSDhudHRnTlVWOGhEajdOOGYzWXVTN0ZLZGR4ZlpDUmhvYjVDRkJsNzh1bTJnZVg3a1AwbmtYa0RtUExWWjdpZXN1L0FRPT0K",
+      "url": "https://github.com/guanyafei00/PixMate/releases/download/v0.3.9/PixMate_0.3.9_x64-setup.exe"
     }
   }
 }
